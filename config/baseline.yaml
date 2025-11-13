@@ -1,0 +1,39 @@
+# Baseline configuration values
+arrival_rates:
+  ## piecewise-constant poisson arrival rates per channel (customers/min) for dayparts
+  # Each triple [a, b, λ] means: from minute a (inclusive) to minute b (exclusive) after store opening, arrivals occur at rate λ customers per minute.
+  # So [0, 60, 0.6] = from t=0 to t=60 minutes, expect 0.6 walk-ins per minute (~36/hour).
+  # The list of triples stitches together a whole day.
+  walkin: [[0, 60, 0.6], [60, 180, 1.0], [180, 300, 0.8], [300, 480, 0.5]]
+  drive_thru: [[0, 60, 0.5], [60, 180, 0.9], [180, 300, 0.7], [300, 480, 0.4]]
+  # make one mobile promised pickup time every interval minutes between start and end
+  mobile_promises:  # every 5 min one mobile promise time appears
+    start: 0
+    end: 480
+    interval: 5
+    promise_offset: 5   # promised pickup time after order placement in minutes
+# Mean service times **in minutes** (exponential means)
+service_rates:
+  cashier: 0.75      # mean = 0.75 min (45 s)
+  espresso: 0.50     # 30 sec
+  hotfood: 0.67      # 40 sec
+  beverage: 0.42     # 25 sec
+  # (optional) window/pack/shelf can inherit cashier if omitted
+capacities:
+  shelf_N: 20 # pickup shelf capacity (acts like a finite buffer)
+  espresso_c: 1 # number of parallel espresso servers
+  hotfood_c: 2
+  beverage_c: 2
+costs:
+  price_coffee: 2.5
+  price_espresso: 4.0
+  price_hotfood: 5.0
+  cogs_pct: 0.35  # cost of goods sold as a fraction of item price
+  wage_per_min: 0.5 # labor cost per worker-minute
+penalties:
+  mobile_late: 1.0  # penalty per late mobile order
+  drivethru_p90_breach: 1.0
+sim:
+  day_minutes: 480  # length of the simulated day (minutes). 8 hrs
+  warmup_minutes: 0 # minutes to ignore for warmup (if you add one)
+  seed: 3 # RNG seed for reproducibility

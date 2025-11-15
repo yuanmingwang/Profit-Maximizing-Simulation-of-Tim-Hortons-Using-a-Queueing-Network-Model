@@ -4,8 +4,18 @@ arrival_rates:
   # Each triple [a, b, λ] means: from minute a (inclusive) to minute b (exclusive) after store opening, arrivals occur at rate λ customers per minute.
   # So [0, 60, 0.6] = from t=0 to t=60 minutes, expect 0.6 walk-ins per minute (~36/hour).
   # The list of triples stitches together a whole day.
-  walkin: [[0, 60, 0.6], [60, 180, 1.0], [180, 300, 0.8], [300, 480, 0.5]]
-  drive_thru: [[0, 60, 0.5], [60, 180, 0.9], [180, 300, 0.7], [300, 480, 0.4]]
+  walkin: [
+            [0, 60, 0.6], 
+            [60, 180, 1.0], 
+            [180, 300, 0.8], 
+            [300, 480, 0.5]
+          ]
+  drive_thru: [
+                [0, 60, 0.5], 
+                [60, 180, 0.9], 
+                [180, 300, 0.7], 
+                [300, 480, 0.4]
+              ]
   # make one mobile promised pickup time every interval minutes between start and end
   mobile_promises:  # every 5 min one mobile promise time appears
     start: 0
@@ -33,6 +43,14 @@ costs:
 penalties:
   mobile_late: 1.0  # penalty per late mobile order
   drivethru_p90_breach: 1.0
+  pickup_renege: 2.5
+customers:
+  pickup_patience_minutes:
+    dine_in: 8   # minutes customers wait at pickup before reneging
+    mobile: 5
+experiments:
+  replications: 10
+  confidence_level: 0.95
 sim:
   day_minutes: 480  # length of the simulated day (minutes). 8 hrs
   warmup_minutes: 0 # minutes to ignore for warmup (if you add one)

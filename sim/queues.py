@@ -85,6 +85,7 @@ class Server:
         self.in_service: int = 0
         self.busy_time: float = 0.0
         self.last_change: float = 0.0
+        self._prev_in_service: int = 0
         self.service_rate = service_rate  # fallback when job has no svc_params
 
     # Capacity check for loss or upstream blocking
@@ -94,6 +95,9 @@ class Server:
     def enqueue(self, env: Env, job: Any) -> bool:
         if not self.can_join():
             return False
+        if hasattr(job, "queue_entry_times"):
+            # Remember when this job joined so we can compute FIFO wait duration on departure
+            job.queue_entry_times[self.name] = env.t
         self.queue.append(job)
         self.try_start_service(env)
         return True
@@ -122,6 +126,9 @@ class Server:
         while self.queue and self.in_service < self.c:
             job = self.queue.pop(0)
             st = self.draw_service(job)
+            if hasattr(job, "service_durations"):
+                # Cache the sampled service time to back out queue wait later
+                job.service_durations[self.name] = st
             self.in_service += 1
             self._mark_busy(env.t)
             env.schedule(Event(env.t + st, "departure", {"server": self, "job": job}))
@@ -129,14 +136,33 @@ class Server:
     def on_departure(self, env: Env, job: Any):
         self.in_service -= 1
         self._mark_busy(env.t)
+        wait = self._extract_wait(job, env.t)
+        if wait is not None:
+            metrics = getattr(env.router, "M", None)
+            if metrics is not None:
+                metrics.note_wait(self.name, job, wait)
         # Advance job through the network
         env.router.advance(env, job, from_server=self)
         # Start next service if possible
         self.try_start_service(env)
 
     def _mark_busy(self, now: float):
-        # crude utilization bookkeeping: add elapsed time if any server busy
+        # Integrate busy server-minutes by tracking how many servers were active
         dt = now - self.last_change
-        if self.in_service > 0:
-            self.busy_time += dt
+        if dt > 0:
+            self.busy_time += self._prev_in_service * dt
         self.last_change = now
+        self._prev_in_service = self.in_service
+
+    def _extract_wait(self, job: Any, now: float) -> Optional[float]:
+        q_times = getattr(job, "queue_entry_times", None)
+        svc = getattr(job, "service_durations", None)
+        if not q_times or not svc:
+            return None
+        t_arr = q_times.pop(self.name, None)
+        st = svc.pop(self.name, None)
+        if t_arr is None or st is None:
+            return None
+        # wait = (departure time) - (service time) - (queue entry)
+        wait = now - st - t_arr
+        return wait if wait > 0 else 0.0

@@ -48,7 +48,7 @@ class Router:
         if from_server.name in ("espresso","hotfood","beverage"):
             # Mark item ready and check order join
             order: Order = job.parent_order  # set by arrivals when creating items
-            if order.mark_item_ready():
+            if order.mark_item_ready(env.t):
                 # all items ready -> enqueue to PACK
                 self.on_arrival(env, order, target="pack")
         elif from_server.name == "pack":
@@ -60,10 +60,18 @@ class Router:
                 self.on_arrival(env, job, target="pack")
             else:
                 job.t_packed = env.t
+                self.M.note_order_packed(job)
         elif from_server.name == "shelf":
             # Customer picks up immediately in this scaffold
             job.t_picked = env.t
-            self.M.note_pickup(job)
+            pickup_wait = 0.0
+            if job.t_packed is not None:
+                pickup_wait = max(job.t_picked - job.t_packed, 0.0)
+            # Customers with finite patience may forfeit their order if wait too long
+            if self._pickup_renege(job, pickup_wait):
+                self.M.note_pickup_renege(job, pickup_wait)
+            else:
+                self.M.note_pickup(job, pickup_wait)
         elif from_server.name in ("cashier","window"):
             # Front‑end order entry -> split into items and send to kitchen
             self._fanout_items(env, job)
@@ -78,3 +86,14 @@ class Router:
             target = it.route[0]
             self.on_arrival(env, it, target=target)
         self.M.note_kitchen_entry(order)
+
+    def _pickup_renege(self, order: Order, pickup_wait: float) -> bool:
+        cust = getattr(order, "customer", None)
+        if cust is None:
+            return False
+        # Only dine-in and mobile customers renege at pickup
+        if not (cust.dine_in or cust.channel == "mobile"):
+            return False
+        if cust.patience is None:
+            return False
+        return pickup_wait > cust.patience

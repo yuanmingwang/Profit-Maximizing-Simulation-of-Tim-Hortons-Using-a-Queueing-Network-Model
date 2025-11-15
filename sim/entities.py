@@ -33,6 +33,10 @@ class Item:
     kind: str                        # 'beverage' | 'espresso' | 'hotfood'
     svc_params: Dict[str, float]     # e.g., {'rate': 1/20} per second
     route: Tuple[str, ...]           # kitchen station path (usually len 1)
+    price: float = 0.0               # selling price for contribution to revenue
+    cogs: float = 0.0                # allocated cost of goods sold
+    queue_entry_times: Dict[str, float] = field(default_factory=dict)   # per-station queue entry timestamps
+    service_durations: Dict[str, float] = field(default_factory=dict)   # sampled service durations per station
 
 @dataclass
 class Order:
@@ -46,7 +50,18 @@ class Order:
 
     # Helpers to check if all items are ready (for pack station join)
     ready_items: int = 0
+    queue_entry_times: Dict[str, float] = field(default_factory=dict)   # per-station arrival times for wait tracking
+    service_durations: Dict[str, float] = field(default_factory=dict)   # cached service samples for wait tracking
 
-    def mark_item_ready(self):
+    def mark_item_ready(self, now: float):
         self.ready_items += 1
-        return self.ready_items == len(self.items)
+        all_ready = self.ready_items == len(self.items)
+        if all_ready:
+            self.t_ready = now
+        return all_ready
+
+    def total_price(self) -> float:
+        return sum(getattr(it, "price", 0.0) for it in self.items)
+
+    def total_cogs(self) -> float:
+        return sum(getattr(it, "cogs", 0.0) for it in self.items)

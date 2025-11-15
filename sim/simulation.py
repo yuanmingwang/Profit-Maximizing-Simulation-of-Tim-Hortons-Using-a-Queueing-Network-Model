@@ -27,8 +27,10 @@ from .arrivals import schedule_arrivals
 def run_one_day(cfg: Dict) -> Dict:
     random.seed(cfg["sim"].get("seed", 0))
 
-    stations = make_stations(cfg)
     M = Metrics(cfg)
+    stations = make_stations(cfg)
+    # Give metrics a view of stations so utilization/labor can be tabulated
+    M.attach_stations(stations)
     router = Router(cfg, stations, M)
     env = Env(router)
 

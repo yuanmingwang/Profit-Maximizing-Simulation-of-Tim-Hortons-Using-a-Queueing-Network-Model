@@ -38,7 +38,7 @@ def make_stations(cfg: dict) -> Dict[str, Server]:
     caps = cfg["capacities"]
     rates_min = cfg.get("service_rates", {})  # mean times in MINUTES
     # Convert to seconds
-    rates = {k: v * 60.0 for k, v in rates_min.items()}
+    rates = {k: v * 60.0 for k, v in rates_min.items()}  # Env clock is seconds, config is minutes
 
     S = {}
     # Front-end

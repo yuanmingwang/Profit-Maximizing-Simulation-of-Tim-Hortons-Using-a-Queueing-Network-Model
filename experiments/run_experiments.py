@@ -3,6 +3,8 @@ experiments/run_experiments.py
 
 Experiment harness that loads the baseline config, applies scenario overrides,
 runs multiple daily replications, and reports KPIs with confidence intervals.
+The script is intentionally lightweight so we can tweak scenarios or plug in
+other analysis pipelines as needed.
 """
 
 from __future__ import annotations
@@ -78,21 +80,27 @@ def avg_nested(results: List[Dict], key: str) -> Dict[str, float]:
     return {subk: totals[subk] / len(results) for subk in totals}
 
 def main():
+    """Entry point: drive all scenarios, replications, and report KPIs."""
     cfg = load_cfg()
     exp_cfg = cfg.get("experiments", {})
     replications = max(1, int(exp_cfg.get("replications", 1)))
     confidence = float(exp_cfg.get("confidence_level", 0.95))
-    base_seed = cfg.get("sim", {}).get("seed", 0)
     level_pct = confidence * 100.0
+    default_seed = cfg.get("sim", {}).get("seed", 0)
 
     for sc in SCENARIOS:
+        sc_base_cfg = apply_overrides(cfg, sc["overrides"])
+        scenario_seed = sc_base_cfg.get("sim", {}).get("seed", default_seed)
+        seed_range = (scenario_seed, scenario_seed + replications - 1)
         results = []
         for rep in range(replications):
-            sc_cfg = apply_overrides(cfg, sc["overrides"])
+            sc_cfg = copy.deepcopy(sc_base_cfg)
             sc_cfg.setdefault("sim", {})
-            sc_cfg["sim"]["seed"] = base_seed + rep
+            # Advance the RNG seed per replication so replications remain iid but scenario-specific seeds stick.
+            sc_cfg["sim"]["seed"] = scenario_seed + rep
             results.append(run_one_day(sc_cfg))
 
+        # Collect KPI distributions across replications so we can report means with CIs.
         profit = mean_ci(series(results, lambda r: r.get("profit_per_day", 0.0)), confidence)
         revenue = mean_ci(series(results, lambda r: r.get("revenue_per_day", 0.0)), confidence)
         labor = mean_ci(series(results, lambda r: r.get("labor_cost_per_day", 0.0)), confidence)
@@ -105,7 +113,7 @@ def main():
         served = avg_nested(results, "served_by_channel")
         utilizations = {k: round(v * 100.0, 1) for k, v in avg_nested(results, "station_utilization").items()}
 
-        print(f"Scenario: {sc['name']} (replications={replications}, {level_pct:.1f}% CI)")
+        print(f"Scenario: {sc['name']} (replications={replications}, {level_pct:.1f}% CI, seeds {seed_range[0]}-{seed_range[1]})")
         print(f"  Profit/day: ${profit[0]:,.2f} ± ${profit[1]:,.2f}")
         print(f"  Revenue/day: ${revenue[0]:,.2f} ± ${revenue[1]:,.2f}")
         print(f"  Labor cost/day: ${labor[0]:,.2f} ± ${labor[1]:,.2f}")

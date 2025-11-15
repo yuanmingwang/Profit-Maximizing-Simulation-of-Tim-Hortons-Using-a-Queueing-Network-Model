@@ -91,21 +91,30 @@ def schedule_arrivals(env, router, cfg):
         order.items = [_make_item("hotfood", 1/40.0, ("hotfood",))]
         env.schedule(Event(ts, "arrival", {"job": order, "target": "window"}))
 
-    # Mobile (deterministic promises for demo)
-    start = rates["mobile_promises"]["start"]
-    end   = rates["mobile_promises"]["end"]
-    step  = rates["mobile_promises"]["interval"]    # minutes
-    offset = rates["mobile_promises"].get("promise_offset", 5)  # minutes
-    for m in range(start, end, step):
-        ts = float(m) * 60.0  # seconds
-        promised_pickup = ts + offset * 60.0
+    # Mobile arrivals can follow NHPP dayparts or fall back to deterministic promises
+    mobile_dayparts = rates.get("mobile")
+    promises_cfg = rates.get("mobile_promises", {})
+    offset_min = promises_cfg.get("promise_offset", 5)
+
+    def _schedule_mobile(ts_seconds: float):
+        promised_pickup = ts_seconds + offset_min * 60.0
         cust = Customer(
             "mobile",
-            arrival_time=ts,
+            arrival_time=ts_seconds,
             promised_pickup=promised_pickup,
             patience=patience_vals.get("mobile"),
         )
-        order = Order(oid=int(ts*1000)+2, customer=cust, items=[], t_created=ts)
+        order = Order(oid=int(ts_seconds*1000)+2, customer=cust, items=[], t_created=ts_seconds)
         order.items = [_make_item("espresso", 1/30.0, ("espresso",))]
-        # In Option B, mobile "release" to kitchen can be before pickup time
-        env.schedule(Event(ts, "arrival", {"job": order, "target": "cashier"}))
+        env.schedule(Event(ts_seconds, "arrival", {"job": order, "target": "cashier"}))
+
+    if mobile_dayparts:
+        for ts in _gen_nhpp_arrivals(0, sim_minutes, mobile_dayparts):
+            _schedule_mobile(ts)
+    else:
+        start = promises_cfg.get("start", 0)
+        end   = promises_cfg.get("end", sim_minutes)
+        step  = promises_cfg.get("interval", 5)
+        for m in range(start, end, step):
+            ts = float(m) * 60.0
+            _schedule_mobile(ts)

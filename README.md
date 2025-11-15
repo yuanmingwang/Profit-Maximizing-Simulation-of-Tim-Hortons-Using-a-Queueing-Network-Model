@@ -13,11 +13,11 @@ store using a queueing‑network model. It is structured for repeatable
 experiments, confidence intervals, and policy/staffing comparisons.
 
 ## Prerequisites
-nstalled pyyaml via 
+Installed pyyaml via 
 ```bash
 python3 -m pip install --user pyyaml
 ```
-so the runner can load YAML configs; ensure this package is available in any environment that runs the experiments.
+So the runner can load YAML configs; ensure this package is available in any environment that runs the experiments.
 
 
 ## How to run

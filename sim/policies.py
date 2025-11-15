@@ -18,6 +18,6 @@
 from __future__ import annotations
 
 def pick_next_at_pack(queue):
-    """Example policy hook (not used in the minimal scaffold)."""
+    """Example policy frame, not used in current code."""
     # FCFS by default; replace with priority among channel types if desired.
     return queue[0] if queue else None

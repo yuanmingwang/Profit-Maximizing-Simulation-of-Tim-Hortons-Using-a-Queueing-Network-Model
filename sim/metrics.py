@@ -35,12 +35,14 @@ class Metrics:
         self.penalties = defaultdict(float)
         self.balks = defaultdict(int)
         self.pickup_reneges = defaultdict(int)
+        cost_cfg = cfg.get("costs", {})
         self.price_map = {
-            "beverage": cfg.get("costs", {}).get("price_coffee", 0.0),
-            "espresso": cfg.get("costs", {}).get("price_espresso", 0.0),
-            "hotfood": cfg.get("costs", {}).get("price_hotfood", 0.0),
+            "beverage": cost_cfg.get("price_coffee", 0.0),
+            "espresso": cost_cfg.get("price_espresso", 0.0),
+            "hotfood": cost_cfg.get("price_hotfood", 0.0),
         }
-        self.cogs_pct = cfg.get("costs", {}).get("cogs_pct", 0.0)
+        self.cogs_pct = cost_cfg.get("cogs_pct", 0.0)
+        self.wages_per_hour = cost_cfg.get("wages_per_hour", {})
         self.stations: Dict[str, Any] = {}
 
     def note_kitchen_entry(self, order):
@@ -103,10 +105,29 @@ class Metrics:
             return
         # Treat blocked entries at finite buffers as balks/lost demand
         self.balks[cust.channel] += 1
+        pct = self.cfg.get("penalties", {}).get("balk_loss_pct", 0.0)
+        if pct:
+            order_value = self._estimate_order_value(job)
+            if order_value > 0:
+                self.penalties["balk_loss"] += order_value * pct
+
+    def _estimate_order_value(self, entity) -> float:
+        if hasattr(entity, "total_price"):
+            val = entity.total_price()
+            if val:
+                return val
+        parent = getattr(entity, "parent_order", None)
+        if parent is not None and hasattr(parent, "total_price"):
+            val = parent.total_price()
+            if val:
+                return val
+        items = getattr(entity, "items", None)
+        if items:
+            return sum(self.price_map.get(getattr(it, "kind", ""), 0.0) for it in items)
+        return 0.0
 
     def summary(self) -> Dict:
         day_minutes = self.cfg["sim"]["day_minutes"]
-        wage_per_min = self.cfg.get("costs", {}).get("wage_per_min", 0.0)
         staff_count = sum(getattr(st, "c", 0) for st in self.stations.values()) if self.stations else 0
         labor_sched_minutes = day_minutes * staff_count
         labor_busy_minutes = 0.0
@@ -118,7 +139,16 @@ class Metrics:
                 labor_busy_minutes += busy_sec / 60.0
                 denom = day_seconds * getattr(st, "c", 1)
                 station_utilization[name] = busy_sec / denom if denom > 0 else 0.0
-        labor_cost = labor_sched_minutes * wage_per_min
+        labor_cost = 0.0
+        if self.wages_per_hour:
+            day_hours = day_minutes / 60.0
+            default_wage = self.wages_per_hour.get("_default_", 0.0)
+            for name, st in self.stations.items():
+                wage_hr = self.wages_per_hour.get(name, default_wage)
+                labor_cost += wage_hr * day_hours * getattr(st, "c", 1)
+        else:
+            wage_per_min = self.cfg.get("costs", {}).get("wage_per_min", 0.0)
+            labor_cost = labor_sched_minutes * wage_per_min
         penalties_total = sum(self.penalties.values())
         profit = self.revenue_total - self.cogs_total - labor_cost - penalties_total
         avg_waits = {}

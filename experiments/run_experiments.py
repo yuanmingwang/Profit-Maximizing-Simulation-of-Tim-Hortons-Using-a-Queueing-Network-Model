@@ -46,9 +46,17 @@ def load_cfg() -> Dict:
     # return cfg
 
 def apply_overrides(cfg: Dict, overrides: Dict) -> Dict:
+    """Apply scenario overrides (recursive merge) on top of the base config."""
     new = copy.deepcopy(cfg)
-    for k, v in overrides.items():
-        new[k] = v
+
+    def _merge(dst: Dict, src: Dict):
+        for key, val in src.items():
+            if isinstance(val, dict) and isinstance(dst.get(key), dict):
+                _merge(dst[key], val)
+            else:
+                dst[key] = copy.deepcopy(val)
+
+    _merge(new, overrides)
     return new
 
 def mean_ci(values: List[float], confidence_level: float) -> tuple[float, float]:
@@ -110,6 +118,8 @@ def main():
         balks = mean_ci(series(results, lambda r: sum(r.get("balked_customers", {}).values())), confidence)
         reneges = mean_ci(series(results, lambda r: sum(r.get("pickup_reneges", {}).values())), confidence)
         penalties = mean_ci(series(results, lambda r: r.get("penalty_total", 0.0)), confidence)
+        dine_in_visits = mean_ci(series(results, lambda r: r.get("dine_in_customers", 0.0)), confidence)
+        dine_in_time = mean_ci(series(results, lambda r: r.get("avg_dine_in_time_minutes", 0.0)), confidence)
         served = avg_nested(results, "served_by_channel")
         utilizations = {k: round(v * 100.0, 1) for k, v in avg_nested(results, "station_utilization").items()}
 
@@ -123,6 +133,8 @@ def main():
         print(f"  Balked/day: {balks[0]:.2f} ± {balks[1]:.2f}")
         print(f"  Pickup reneges/day: {reneges[0]:.2f} ± {reneges[1]:.2f}")
         print(f"  Penalties/day: ${penalties[0]:,.2f} ± ${penalties[1]:,.2f}")
+        print(f"  Dine-in customers/day: {dine_in_visits[0]:.2f} ± {dine_in_visits[1]:.2f}")
+        print(f"  Avg dine-in stay (incl cleaning): {dine_in_time[0]:.2f} ± {dine_in_time[1]:.2f} min")
         print(f"  Served by channel (mean customers/day): { {k: round(v, 1) for k, v in served.items()} }")
         print(f"  Station utilization (mean % busy): {utilizations}")
         print("-")

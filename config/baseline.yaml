@@ -44,11 +44,15 @@ service_rates:
   hotfood: 0.33
   pack: 0.20
   shelf: 0.02
+  dine_in: 6.0              # baseline dine-in visit duration (minutes)
+  table_cleaning: 0.33      # mean cleaning time per table (~3 tables/min)
 capacities:
   shelf_N: 20               # pickup shelf capacity (acts like a finite buffer)
   espresso_c: 1             # number of parallel espresso servers
   hotfood_c: 3
   beverage_c: 3
+  dine_in_tables: 25        # seating capacity for dine-in guests
+  table_cleaners: 1         # number of bussers cleaning tables
 costs:
   price_coffee: 2.10
   price_espresso: 4.25
@@ -62,6 +66,8 @@ costs:
     hotfood: 18.0
     pack: 17.0
     shelf: 17.0
+    dine_in: 0.0            # empty tables incur no labor cost (customers seat themselves)
+    dine_in_clean: 16.0
     _default_: 17.0
 penalties:
   mobile_late: 0.5            # penalty per late mobile order

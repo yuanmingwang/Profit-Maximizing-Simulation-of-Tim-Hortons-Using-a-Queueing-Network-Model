@@ -20,6 +20,55 @@ import math
 from typing import Dict
 from .queues import Server
 
+class DineInServer(Server):
+    """
+    Specialized server for dine-in seating that keeps each table unavailable
+    until a downstream cleaning server finishes wiping it.
+
+    The departure hook defers releasing capacity until the cleaning stage calls
+    back via `release_after_clean`, which mirrors the real-world requirement
+    that a table cannot be reused immediately after a guest leaves.
+    """
+    def __init__(self, name: str, cleaning_server: Server, c: int, K: int, service_rate: float | None):
+        super().__init__(name, c=c, K=K, service_rate=service_rate)
+        self.cleaning_server = cleaning_server
+        self._pending_releases = 0
+
+    def on_departure(self, env, job):
+        """
+        Override Server.on_departure to:
+          1. Forward completion to the router (for metrics and next-stage logic).
+          2. Immediately enqueue the vacated table for cleaning.
+          3. Defer releasing the table capacity until cleaning is done.
+        """
+        wait = self._extract_wait(job, env.t)
+        if wait is not None:
+            metrics = getattr(env.router, "M", None)
+            if metrics is not None:
+                metrics.note_wait(self.name, job, wait)
+        env.router.advance(env, job, from_server=self)
+        # Cleaning queue represents bussers wiping the table; capacity may block.
+        ok = self.cleaning_server.enqueue(env, job)
+        if not ok:
+            # If cleaning queue is finite and full, log the block and retry.
+            env.router.M.note_block(env.t, self.cleaning_server.name, job)
+            # Best-effort re-enqueue; in practice the cleaning queue is infinite.
+            self.cleaning_server.enqueue(env, job)
+        self._pending_releases += 1
+
+    def release_after_clean(self, env):
+        """
+        Invoked when the cleaning server finishes wiping a table. At this point
+        the seat becomes usable again, so release one unit of capacity and
+        immediately try to start the next waiting party.
+        """
+        if self._pending_releases <= 0:
+            return
+        self._pending_releases -= 1
+        self.in_service -= 1
+        self._mark_busy(env.t)
+        self.try_start_service(env)
+
 def make_stations(cfg: dict) -> Dict[str, Server]:
     """
     Create all stations from config using mean service times specified in MINUTES in YAML.
@@ -37,8 +86,9 @@ def make_stations(cfg: dict) -> Dict[str, Server]:
     """
     caps = cfg["capacities"]
     rates_min = cfg.get("service_rates", {})  # mean times in MINUTES
-    # Convert to seconds
-    rates = {k: v * 60.0 for k, v in rates_min.items()}  # Env clock is seconds, config is minutes
+    # Convert to seconds (Env clock is in seconds, config supplied in minutes)
+    rates = {k: v * 60.0 for k, v in rates_min.items()}
+    dine_cfg = cfg.get("dine_in", {})
 
     S = {}
     # Front-end
@@ -51,4 +101,19 @@ def make_stations(cfg: dict) -> Dict[str, Server]:
     # Pack & Pickup
     S["pack"]     = Server("pack",     c=1,   K=math.inf, service_rate=rates.get("pack", rates.get("cashier")))
     S["shelf"]    = Server("shelf",    c=1,   K=caps.get("shelf_N", 20), service_rate=rates.get("shelf", rates.get("cashier")))
+    # Dine-in seating with explicit cleaning stage (tables remain blocked until busser finishes)
+    num_tables = dine_cfg.get("tables", caps.get("dine_in_tables", 25))
+    cleaners = caps.get("table_cleaners", 1)
+    cleaning_rate = rates.get("table_cleaning", None)
+    if num_tables and cleaning_rate is not None:
+        S["dine_in_clean"] = Server("dine_in_clean", c=cleaners, K=math.inf, service_rate=cleaning_rate)
+        S["dine_in"] = DineInServer(
+            "dine_in",
+            cleaning_server=S["dine_in_clean"],
+            c=num_tables,
+            K=num_tables,
+            service_rate=rates.get("dine_in"),
+        )
+    elif num_tables:
+        S["dine_in"] = Server("dine_in", c=num_tables, K=num_tables, service_rate=rates.get("dine_in"))
     return S

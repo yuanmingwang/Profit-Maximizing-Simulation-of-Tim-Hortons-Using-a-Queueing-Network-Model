@@ -47,6 +47,8 @@ class Order:
     t_ready: Optional[float] = None
     t_packed: Optional[float] = None
     t_picked: Optional[float] = None
+    t_seated: Optional[float] = None
+    t_left_dine_in: Optional[float] = None
 
     # Helpers to check if all items are ready (for pack station join)
     ready_items: int = 0

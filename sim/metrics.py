@@ -35,6 +35,8 @@ class Metrics:
         self.penalties = defaultdict(float)
         self.balks = defaultdict(int)
         self.pickup_reneges = defaultdict(int)
+        self.dine_in_customers = 0
+        self.dine_in_time_total = 0.0
         cost_cfg = cfg.get("costs", {})
         self.price_map = {
             "beverage": cost_cfg.get("price_coffee", 0.0),
@@ -126,6 +128,17 @@ class Metrics:
             return sum(self.price_map.get(getattr(it, "kind", ""), 0.0) for it in items)
         return 0.0
 
+    def note_dinein_start(self, order):
+        """Track when a dine-in guest seizes a table."""
+        self.dine_in_customers += 1
+
+    def note_dinein_departure(self, order, t_depart: float):
+        """Accumulate total dine-in table occupancy (including cleaning time)."""
+        if order.t_seated is None:
+            return
+        dwell = max(t_depart - order.t_seated, 0.0)
+        self.dine_in_time_total += dwell
+
     def summary(self) -> Dict:
         day_minutes = self.cfg["sim"]["day_minutes"]
         staff_count = sum(getattr(st, "c", 0) for st in self.stations.values()) if self.stations else 0
@@ -160,6 +173,10 @@ class Metrics:
         for channel, total in self.pickup_wait_totals.items():
             served = self.channel_served.get(channel, 0)
             avg_pickup_waits[channel] = (total / served / 60.0) if served > 0 else 0.0
+        avg_dine_in_time = (
+            (self.dine_in_time_total / self.dine_in_customers) / 60.0
+            if self.dine_in_customers > 0 else 0.0
+        )
         return {
             "pickups": self.pickups,
             "kitchen_entries": self.kitchen_entries,
@@ -183,4 +200,6 @@ class Metrics:
             "profit_per_day": profit,
             "served_by_channel": dict(self.channel_served),
             "station_utilization": station_utilization,
+            "dine_in_customers": self.dine_in_customers,
+            "avg_dine_in_time_minutes": avg_dine_in_time,
         }

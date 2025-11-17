@@ -31,12 +31,13 @@ class Router:
         self.orders: Dict[int, Order] = {}
 
     # Incoming arrivals (already created by arrivals.py)
-    def on_arrival(self, env, job: Any, target: str):
+    def on_arrival(self, env, job: Any, target: str) -> bool:
         server = self.S[target]
         ok = server.enqueue(env, job)
         if not ok:
             # capacity full -> loss/blocking; record if needed
             self.M.note_block(env.t, target, job)
+        return ok
 
     # Timer hooks for policies (e.g., brew cycles), unused in this scaffold
     def on_timer(self, env, **data):
@@ -72,6 +73,17 @@ class Router:
                 self.M.note_pickup_renege(job, pickup_wait)
             else:
                 self.M.note_pickup(job, pickup_wait)
+                self._post_pickup(env, job)
+        elif from_server.name == "dine_in":
+            # Dine-in visit (including cleaning) finished -> free table
+            job.t_left_dine_in = env.t
+            self.M.note_dinein_departure(job, env.t)
+        elif from_server.name == "dine_in_clean":
+            # Cleaning completed -> notify the dine-in server to free a table
+            dine_srv = self.S.get("dine_in")
+            release = getattr(dine_srv, "release_after_clean", None)
+            if callable(release):
+                release(env)
         elif from_server.name in ("cashier","window"):
             # Front‑end order entry -> split into items and send to kitchen
             self._fanout_items(env, job)
@@ -86,6 +98,18 @@ class Router:
             target = it.route[0]
             self.on_arrival(env, it, target=target)
         self.M.note_kitchen_entry(order)
+
+    def _post_pickup(self, env, order: Order):
+        """Route customers after the pickup shelf based on their channel characteristics."""
+        cust = getattr(order, "customer", None)
+        if not cust:
+            return
+        if cust.dine_in and "dine_in" in self.S:
+            # Dine-in patrons seize a table; cleaning time is baked into the service mean
+            ok = self.on_arrival(env, order, target="dine_in")
+            if ok:
+                order.t_seated = env.t
+                self.M.note_dinein_start(order)
 
     def _pickup_renege(self, order: Order, pickup_wait: float) -> bool:
         cust = getattr(order, "customer", None)

@@ -177,6 +177,8 @@ class Metrics:
             (self.dine_in_time_total / self.dine_in_customers) / 60.0
             if self.dine_in_customers > 0 else 0.0
         )
+        total_customers = sum(self.channel_served.values())
+        rev_per_customer = (self.revenue_total / total_customers) if total_customers > 0 else 0.0
         return {
             "pickups": self.pickups,
             "kitchen_entries": self.kitchen_entries,
@@ -202,4 +204,5 @@ class Metrics:
             "station_utilization": station_utilization,
             "dine_in_customers": self.dine_in_customers,
             "avg_dine_in_time_minutes": avg_dine_in_time,
+            "revenue_per_customer": rev_per_customer,
         }

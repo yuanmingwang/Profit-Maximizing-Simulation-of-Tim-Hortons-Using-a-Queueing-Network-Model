@@ -165,4 +165,67 @@ PROFIT_FOCUS = {
     },
 }
 
-SCENARIOS = [BASELINE, LEGACY_BASELINE, HIGH_CLEANING_LOAD, PROFIT_FOCUS]
+OPTIMIZE_PROFIT_SEARCH1 = {
+    "name": "optimize_profit_search1",
+    "overrides": {
+        "service_rates": {
+            "cashier": 0.4391533230389236,
+            "window": 0.43814917855302943,
+            "hotfood": 0.34103500867802417,
+            "pack": 0.20040422208687653,
+            "dine_in": 6.951522523373763,
+            "table_cleaning": 0.31188987247370076,
+        },
+        "capacities": {
+            "beverage_c": 1,
+            "espresso_c": 1,
+            "hotfood_c": 2,
+            "dine_in_tables": 17,
+            "table_cleaners": 3,
+        },
+        "penalties": {
+            "balk_loss_pct": 0.3781627770236142,
+        },
+        "sim": {
+            "seed": 3,
+        },
+    },
+}
+
+OPTIMIZE_PROFIT_SEARCH2 = {
+    "name": "optimize_profit_search2",
+    "overrides": {
+        "service_rates": {
+            "cashier": 0.4004430730505888,
+            "window": 0.5306344949960384,
+            "beverage": 0.33,
+            "espresso": 0.25,
+            "hotfood": 0.3383694596142368,
+            "pack": 0.2355278968200934,
+            "shelf": 0.02,
+            "dine_in": 6.784510658169075,
+            "table_cleaning": 0.28956583570568595,
+        },
+        "capacities": {
+            "shelf_N": 20,
+            "espresso_c": 2,
+            "hotfood_c": 3,
+            "beverage_c": 1,
+            "dine_in_tables": 17,
+            "table_cleaners": 1,
+        },
+        "penalties": {
+            "mobile_late": 0.5,
+            "drivethru_p90_breach": 0.2,
+            "pickup_renege": 0.0,
+            "balk_loss_pct": 0.25682326316887866,
+        },
+        "sim": {
+            "day_minutes": 960,
+            "warmup_minutes": 0,
+            "seed": 3,
+        },
+    },
+}
+
+SCENARIOS = [BASELINE, LEGACY_BASELINE, HIGH_CLEANING_LOAD, PROFIT_FOCUS, OPTIMIZE_PROFIT_SEARCH1, OPTIMIZE_PROFIT_SEARCH2]

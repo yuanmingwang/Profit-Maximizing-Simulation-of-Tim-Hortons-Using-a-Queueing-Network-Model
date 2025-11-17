@@ -108,14 +108,13 @@ class Server:
         the station-level `service_rate` provided at construction, otherwise
         a benign default (0.5 min per customer).
         """
-        # Priority: job mean_min > job rate_per_min > station mean > station rate > default
         rate = None
-        # 1) Try job-level svc_params if available
-        if hasattr(job, "svc_params"):
-            rate = job.svc_params.get("rate")
-            # sp = getattr(job, "svc_params", None)
-            # if isinstance(sp, dict):
-            #     rate = sp.get("rate", None)
+        # # 1) Try job-level svc_params if available
+        # if hasattr(job, "svc_params"):
+        #     rate = job.svc_params.get("rate")
+        #     # sp = getattr(job, "svc_params", None)
+        #     # if isinstance(sp, dict):
+        #     #     rate = sp.get("rate", None)
         
         # 2) Fall back to station-level rate
         if rate is None:

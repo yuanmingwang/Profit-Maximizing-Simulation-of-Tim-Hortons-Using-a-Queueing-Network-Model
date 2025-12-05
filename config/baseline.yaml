@@ -90,18 +90,24 @@ costs:
     shelf: 0.0              # staff managing the pickup shelf
     dine_in: 0.0            # empty tables incur no labor cost (customers seat themselves)
     dine_in_clean: 16.0     # bussers responsible for cleaning tables
-    _default_: 17.0         # fallback wage for any unspecified station
+    _default_: 0            # fallback wage for any unspecified station
 penalties:
-  mobile_late: 0.5            # penalty per late mobile order
-  drivethru_p90_breach: 0.2   # penalty per drive-thru wait above p90 target
+  mobile_late: 0.5          # penalty per late mobile order
+  drivethru_p90_breach: 0.2 # penalty per drive-thru wait above p90 target
   drivethru_p90_target_minutes: 1.0  # p90 target threshold (minutes)
   pickup_renege: 0.0
-  balk_loss_pct: 0.4          # lost margin fraction per balked customer
+  balk_loss_pct: 0.4        # lost margin fraction per balked customer
+policies:
+  pack_priority: []         # optional channel priority list for pack queue default empty = FIFO (e.g., ["mobile"], ["drive_thru","mobile","walkin"])
 experiments:
   replications: 5
   confidence_level: 0.95
   time_series_interval_minutes: 3  # bin width for profit/revenue interval plot
+  crn_compare: 
+    - [baseline, high_load_scenario_1] 
+    - [baseline, baseline_optimized_scenario_2]
+    - [high_load_scenario_1, baseline_optimized_scenario_2]
 sim:
-  day_minutes: 960            # 6AM–10PM operating window
-  warmup_minutes: 30           # minutes to ignore for warmup (if you add one)
-  seed: 3                     # RNG seed for reproducibility
+  day_minutes: 960          # 6AM–10PM operating window
+  warmup_minutes: 30        # minutes to ignore for warmup (if you add one)
+  seed: 3                   # RNG seed for reproducibility

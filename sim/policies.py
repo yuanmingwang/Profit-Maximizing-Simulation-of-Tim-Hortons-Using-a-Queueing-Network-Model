@@ -18,6 +18,8 @@
 from __future__ import annotations
 
 def pick_next_at_pack(queue):
-    """Example policy frame, not used in current code."""
-    # FCFS by default; replace with priority among channel types if desired.
+    """
+    Placeholder kept for backward compatibility; real logic now lives in
+    PackServer inside stations.py and uses the configured priority list.
+    """
     return queue[0] if queue else None

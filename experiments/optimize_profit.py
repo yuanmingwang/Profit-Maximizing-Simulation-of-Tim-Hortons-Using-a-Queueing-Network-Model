@@ -30,8 +30,11 @@ except Exception:  # pragma: no cover - fallback for VSCode "python file.py"
 SERVICE_MULTS = {
     "cashier": (0.8, 1.2),
     "window": (0.8, 1.2),
+    "drive_thru_pickup": (0.8, 1.2),
     "beverage": (0.8, 1.2),
+    "beverage_refill": (0.8, 1.2),
     "espresso": (0.8, 1.2),
+    "espresso_maintenance": (0.8, 1.2),
     "hotfood": (0.8, 1.2),
     "pack": (0.8, 1.2),
     "shelf": (0.8, 1.2),
@@ -40,10 +43,12 @@ SERVICE_MULTS = {
 }
 # CAPACITY_CHOICES specify integer ranges for the number of parallel servers.
 CAPACITY_CHOICES = {
+    "beverage_urn_size": (20, 30),     
     "espresso_c": (1, 3),
+    "espresso_batch_size": (35, 45),
     "hotfood_c": (1, 3),
     "beverage_c": (1, 3),
-    "dine_in_tables": (10, 15),
+    "dine_in_tables": (15, 25),
     "table_cleaners": (1, 3),
 }
 # Step sizes for each grid (tweak to trade off runtime vs. resolution).
@@ -103,9 +108,22 @@ PRICE_RANGES = {
 }
 PRICE_STEP = 0.5
 
+# Optional pack priority search: list all permutations of channel priorities to scan.
+USE_PACK_PRIORITY_SEARCH = True
+# Priority lists are tested in the provided order; [] means FIFO (no priority).
+PACK_PRIORITY_OPTIONS: List[List[str]] = [
+    [],  # FIFO baseline
+    # ["drive_thru", "mobile", "walkin"],
+    # ["mobile", "drive_thru", "walkin"],
+    # ["walkin", "drive_thru", "mobile"],
+    ["drive_thru"],
+    ["mobile"],
+    ["walkin"],
+]
+
 # Which scenarios to optimize (match names in scenarios.py). Example: ["baseline", "legacy_baseline"]
-SELECTED_SCENARIOS = ["baseline"]
-# SELECTED_SCENARIOS = ["high_load"]
+# SELECTED_SCENARIOS = ["baseline"]
+SELECTED_SCENARIOS = ["high_load"]
 
 # Monte Carlo controls: number of replications per candidate and the seed to start from.
 SEARCH_ITERATIONS = 3       # e.g., 5 -> seeds start_seed ... start_seed+4
@@ -285,6 +303,22 @@ def coord_ascent(base_cfg: Dict, service_step: float, capacity_step: int, passes
                         best_val = cand["costs"][key]
                 price_cfg[key] = best_val
                 best_profit = local_best
+
+        # Sweep pack priorities if enabled (finite option set)
+        if USE_PACK_PRIORITY_SEARCH:
+            pol_cfg = current.setdefault("policies", {})
+            best_val = pol_cfg.get("pack_priority", [])
+            local_best = best_profit
+            for opt in PACK_PRIORITY_OPTIONS:
+                cand = copy.deepcopy(current)
+                cand.setdefault("policies", {})
+                cand["policies"]["pack_priority"] = opt
+                profit = evaluate(cand, iterations, start_seed)
+                if profit > local_best:
+                    local_best = profit
+                    best_val = opt
+            pol_cfg["pack_priority"] = best_val
+            best_profit = local_best
     return best_profit, current
 
 def _print_block(indent: int, key: str, block: Dict):
@@ -316,7 +350,7 @@ def format_as_scenario(name: str, cfg: Dict):
     print(f'{name.upper()} = {{')
     print(f'    "name": "{name}",')
     print('    "overrides": {')
-    for section in ("service_rates", "capacities", "penalties", "costs"):
+    for section in ("service_rates", "capacities", "penalties", "costs", "policies"):
         block = cfg.get(section, {})
         if not block:
             continue

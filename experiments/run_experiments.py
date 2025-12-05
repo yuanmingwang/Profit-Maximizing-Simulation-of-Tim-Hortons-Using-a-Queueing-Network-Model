@@ -88,6 +88,43 @@ def sample_stddev(values: List[float]) -> float:
         return 0.0
     return stdev(values)
 
+def run_crn(cfg: Dict, sc_a: Dict, sc_b: Dict, replications: int, base_seed: int, confidence: float):
+    """
+    Run a common-random-number comparison between two scenarios, using the same
+    seed stream per replication, and report paired differences and CI of the mean.
+    """
+    results = []
+    # Build base configs
+    cfg_a = apply_overrides(cfg, sc_a["overrides"])
+    cfg_b = apply_overrides(cfg, sc_b["overrides"])
+    for rep in range(replications):
+        seed = base_seed + rep
+        cfg_a_run = copy.deepcopy(cfg_a); cfg_a_run.setdefault("sim", {})["seed"] = seed
+        cfg_b_run = copy.deepcopy(cfg_b); cfg_b_run.setdefault("sim", {})["seed"] = seed
+        res_a = run_one_day(cfg_a_run)
+        res_b = run_one_day(cfg_b_run)
+        results.append((seed, res_a.get("profit_per_day", 0.0), res_b.get("profit_per_day", 0.0)))
+    diffs = [b - a for (_, a, b) in results]
+    mean_diff = mean(diffs)
+    sd_diff = stdev(diffs) if len(diffs) > 1 else 0.0
+    level = min(max(confidence, 0.0), 0.999999)
+    alpha = 1.0 - level
+    df = max(1, len(diffs) - 1)
+    try:  # pragma: no cover
+        from scipy.stats import t  # type: ignore
+        tcrit = t.ppf(1 - alpha / 2.0, df)
+    except Exception:
+        tcrit = NormalDist().inv_cdf(1 - alpha / 2.0)
+    half = tcrit * (sd_diff / math.sqrt(len(diffs))) if len(diffs) > 1 else 0.0
+    # Print CRN table
+    print("CRN paired profit comparison (Scenario2 - Scenario1):")
+    print("  Replication | Seed | Profit1 | Profit2 | Difference")
+    for idx, (seed, p1, p2) in enumerate(results, start=1):
+        print(f"    {idx:2d}        | {seed:4d} | ${p1:,.2f} | ${p2:,.2f} | ${p2 - p1:,.2f}")
+    print(f"  Mean difference (profit2 - profit1): ${mean_diff:,.2f}")
+    print(f"  Std dev of differences: {sd_diff:,.2f}")
+    print(f"  {level*100:.1f}% CI of mean diff: ${mean_diff - half:,.2f} to ${mean_diff + half:,.2f}")
+
 def series(results: List[Dict], extractor: Callable[[Dict], float]) -> List[float]:
     """Collect a numeric series from each replication result."""
     return [float(extractor(res)) for res in results]
@@ -146,8 +183,15 @@ def aggregate_time_series(results: List[Dict], day_minutes: float, interval_minu
         return []
     if interval_minutes <= 0:
         interval_minutes = 6.0
+    # Start grid at 0 to include an explicit origin point for plotting.
     grid = [i * interval_minutes for i in range(int(math.ceil(day_minutes / interval_minutes)) + 1)]
     aggregated: List[Dict[str, float]] = []
+    # Include the initial zero interval so curves start at time=0 with 0 increment.
+    aggregated.append({
+        "time_minutes": 0.0,
+        "profit_interval": 0.0,
+        "revenue_interval": 0.0,
+    })
     for idx in range(1, len(grid)):
         end_minute = float(grid[idx])
         start_minute = float(grid[idx - 1])
@@ -288,6 +332,26 @@ def main():
         if plot_path:
             print(f"  Profit, Revenue, Warm-up plot saved to: {plot_path}")
         print("-")
+
+    # Optional CRN comparison between two named scenarios using common random numbers
+    crn_pairs = exp_cfg.get("crn_compare")
+    if crn_pairs:
+        # Normalize to list of pairs
+        if isinstance(crn_pairs, tuple):
+            crn_pairs = [list(crn_pairs)]
+        if isinstance(crn_pairs, list) and crn_pairs and isinstance(crn_pairs[0], (list, tuple)):
+            sc_index = {s["name"]: s for s in SCENARIOS}
+            for pair in crn_pairs:
+                if len(pair) != 2:
+                    print(f"[warn] skipping CRN entry (needs 2 names): {pair}")
+                    continue
+                sc_a = sc_index.get(pair[0])
+                sc_b = sc_index.get(pair[1])
+                if sc_a and sc_b:
+                    print(f"\nCRN Comparison: {sc_a['name']} vs {sc_b['name']} (replications={replications}, seeds shared)")
+                    run_crn(cfg, sc_a, sc_b, replications, default_seed, confidence)
+                else:
+                    print(f"[warn] CRN pair not found: {pair}")
 
 if __name__ == "__main__":
     main()

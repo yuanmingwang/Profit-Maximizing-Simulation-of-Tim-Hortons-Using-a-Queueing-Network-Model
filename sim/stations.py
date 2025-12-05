@@ -18,8 +18,7 @@
 from __future__ import annotations
 import math
 from typing import Dict
-from .queues import Server, BatchServer, PickupServer
-
+from .queues import Server, BatchServer, PickupServer, Event
 class DineInServer(Server):
     """
     Specialized server for dine-in seating that keeps each table unavailable
@@ -68,6 +67,44 @@ class DineInServer(Server):
         self.in_service -= 1
         self._mark_busy(env.t)
         self.try_start_service(env)
+
+
+class PackServer(Server):
+    """
+    Pack server with configurable channel priority. If a priority list is
+    provided (e.g., ["drive_thru", "mobile", "walkin"]), it will always pick
+    the earliest channel present in the queue; otherwise it defaults to FIFO.
+    Within a channel, it preserves arrival order.
+    """
+    def __init__(self, name: str, c: int, K: float, service_rate: float | None, priority: list[str] | None = None):
+        super().__init__(name, c=c, K=K, service_rate=service_rate)
+        self.priority = priority or []
+
+    def _pop_next(self):
+        """Return the next job respecting channel priority, else FIFO."""
+        if not self.queue:
+            return None
+        if not self.priority:
+            return self.queue.pop(0)
+        # Find first job whose channel matches the earliest listed priority
+        for ch in self.priority:
+            for idx, job in enumerate(self.queue):
+                cust = getattr(job, "customer", None)
+                if cust and getattr(cust, "channel", None) == ch:
+                    return self.queue.pop(idx)
+        return self.queue.pop(0)
+
+    def try_start_service(self, env):
+        while self.queue and self.in_service < self.c:
+            job = self._pop_next()
+            if job is None:
+                break
+            st = self.draw_service(job)
+            if hasattr(job, "service_durations"):
+                job.service_durations[self.name] = st
+            self.in_service += 1
+            self._mark_busy(env.t)
+            env.schedule(Event(env.t + st, "departure", {"server": self, "job": job}))
 
 def make_stations(cfg: dict) -> Dict[str, Server]:
     """
@@ -135,7 +172,8 @@ def make_stations(cfg: dict) -> Dict[str, Server]:
         service_rate=rates.get("drive_thru_pickup", rates.get("window")),
     )
     # Pack & Pickup
-    S["pack"]     = Server("pack",     c=1,   K=math.inf, service_rate=rates.get("pack", rates.get("cashier")))
+    pack_priority = cfg.get("policies", {}).get("pack_priority", [])
+    S["pack"]     = PackServer("pack",     c=1,   K=math.inf, service_rate=rates.get("pack", rates.get("cashier")), priority=pack_priority)
     # Pickup shelf modeled as FIFO pickup server; customers wait until their packed order reaches head of queue.
     S["shelf"]    = PickupServer("shelf",    c=1,   K=caps.get("shelf_N", 20), service_rate=rates.get("shelf", rates.get("cashier")))
     # Dine-in seating with explicit cleaning stage (tables remain blocked until busser finishes)

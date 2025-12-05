@@ -122,8 +122,8 @@ PACK_PRIORITY_OPTIONS: List[List[str]] = [
 ]
 
 # Which scenarios to optimize (match names in scenarios.py). Example: ["baseline", "legacy_baseline"]
-# SELECTED_SCENARIOS = ["baseline"]
-SELECTED_SCENARIOS = ["high_load"]
+SELECTED_SCENARIOS = ["baseline"]
+# SELECTED_SCENARIOS = ["high_load_scenario_1"]
 
 # Monte Carlo controls: number of replications per candidate and the seed to start from.
 SEARCH_ITERATIONS = 3       # e.g., 5 -> seeds start_seed ... start_seed+4

@@ -88,7 +88,7 @@ def sample_stddev(values: List[float]) -> float:
         return 0.0
     return stdev(values)
 
-def run_crn(cfg: Dict, sc_a: Dict, sc_b: Dict, replications: int, base_seed: int, confidence: float):
+def run_crn(cfg: Dict, sc_a: Dict, sc_b: Dict, replications: int, base_seed: int, confidence: float, C : int):
     """
     Run a common-random-number comparison between two scenarios, using the same
     seed stream per replication, and report paired differences and CI of the mean.
@@ -108,7 +108,11 @@ def run_crn(cfg: Dict, sc_a: Dict, sc_b: Dict, replications: int, base_seed: int
     mean_diff = mean(diffs)
     sd_diff = stdev(diffs) if len(diffs) > 1 else 0.0
     level = min(max(confidence, 0.0), 0.999999)
-    alpha = 1.0 - level
+    # alpha = 1.0 - level
+    # alpha here should follow the Bonferroni approach
+    # Check LectureNotes-Week13.pdf, page 84, 9.2 Comparison of Multiple System Designs
+    # a_i = a_E / C, and C = 3 here in our comparasion
+    alpha = (1.0 - level) / C
     df = max(1, len(diffs) - 1)
     try:  # pragma: no cover
         from scipy.stats import t  # type: ignore
@@ -341,6 +345,11 @@ def main():
             crn_pairs = [list(crn_pairs)]
         if isinstance(crn_pairs, list) and crn_pairs and isinstance(crn_pairs[0], (list, tuple)):
             sc_index = {s["name"]: s for s in SCENARIOS}
+            # Calculate C using in Bonferroni approach to calculate the confidence interval
+            # C = K(K-1)/2, where K = # alternative system design
+            # Check LectureNotes-Week13.pdf, page 84, 9.2 Comparison of Multiple System Designs
+            K = len(crn_pairs)
+            C = K * (K - 1) / 2
             for pair in crn_pairs:
                 if len(pair) != 2:
                     print(f"[warn] skipping CRN entry (needs 2 names): {pair}")
@@ -348,8 +357,8 @@ def main():
                 sc_a = sc_index.get(pair[0])
                 sc_b = sc_index.get(pair[1])
                 if sc_a and sc_b:
-                    print(f"\nCRN Comparison: {sc_a['name']} vs {sc_b['name']} (replications={replications}, seeds shared)")
-                    run_crn(cfg, sc_a, sc_b, replications, default_seed, confidence)
+                    print(f"\nCRN & Bonferroni Comparison: {sc_a['name']} vs {sc_b['name']} (replications={replications}, seeds shared)")
+                    run_crn(cfg, sc_a, sc_b, replications, default_seed, confidence, C)
                 else:
                     print(f"[warn] CRN pair not found: {pair}")
 

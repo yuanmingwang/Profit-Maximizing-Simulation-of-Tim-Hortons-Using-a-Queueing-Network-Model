@@ -280,7 +280,7 @@ def main():
         print(f"  Avg dine-in stay (incl cleaning): {dine_in_time[0]:.2f} ± {dine_in_time[1]:.2f} min")
         print(f"  Avg revenue per customer: ${rev_per_customer[0]:.2f} ± ${rev_per_customer[1]:.2f}")
         print(f"  Served by channel (mean customers/day): { {k: round(v, 1) for k, v in served.items()} }")
-        print(f"  Station utilization (mean % busy): {utilizations}")
+        print(f"  Server utilization (mean % busy): {utilizations}")
         if plot_path:
             print(f"  Profit, Revenue, Warm-up plot saved to: {plot_path}")
         print("-")

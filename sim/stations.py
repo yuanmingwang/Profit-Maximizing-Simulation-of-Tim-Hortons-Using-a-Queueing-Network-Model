@@ -18,7 +18,7 @@
 from __future__ import annotations
 import math
 from typing import Dict
-from .queues import Server
+from .queues import Server, BatchServer
 
 class DineInServer(Server):
     """
@@ -95,9 +95,37 @@ def make_stations(cfg: dict) -> Dict[str, Server]:
     S["cashier"]  = Server("cashier",  c=1, K=math.inf, service_rate=rates.get("cashier"))
     S["window"]   = Server("window",   c=1, K=math.inf, service_rate=rates.get("window", rates.get("cashier")))
     # Kitchen
-    S["espresso"] = Server("espresso", c=caps.get("espresso_c",1), K=math.inf, service_rate=rates.get("espresso"))
+    # Espresso with maintenance cycles (limited shots then downtime)
+    espresso_batch = cfg.get("espresso", {}).get("batch_size", cfg.get("capacities", {}).get("espresso_batch_size", None))
+    espresso_maint = cfg.get("espresso", {}).get("maintenance_minutes", cfg.get("service_rates", {}).get("espresso_maintenance", None))
+    if espresso_batch and espresso_maint:
+        S["espresso"] = BatchServer(
+            "espresso",
+            c=caps.get("espresso_c",1),
+            K=math.inf,
+            service_rate=rates.get("espresso"),
+            batch_size=int(espresso_batch),
+            downtime=espresso_maint * 60.0,
+        )
+    else:
+        S["espresso"] = Server("espresso", c=caps.get("espresso_c",1), K=math.inf, service_rate=rates.get("espresso"))
+
     S["hotfood"]  = Server("hotfood",  c=caps.get("hotfood_c",2),  K=math.inf, service_rate=rates.get("hotfood"))
-    S["beverage"] = Server("beverage", c=caps.get("beverage_c",2), K=math.inf, service_rate=rates.get("beverage"))
+
+    # Beverage with urn cycles (finite pours then refill downtime)
+    bev_batch = cfg.get("beverage", {}).get("urn_size", cfg.get("capacities", {}).get("beverage_urn_size", None))
+    bev_refill = cfg.get("beverage", {}).get("refill_minutes", cfg.get("service_rates", {}).get("beverage_refill", None))
+    if bev_batch and bev_refill:
+        S["beverage"] = BatchServer(
+            "beverage",
+            c=caps.get("beverage_c",2),
+            K=math.inf,
+            service_rate=rates.get("beverage"),
+            batch_size=int(bev_batch),
+            downtime=bev_refill * 60.0,
+        )
+    else:
+        S["beverage"] = Server("beverage", c=caps.get("beverage_c",2), K=math.inf, service_rate=rates.get("beverage"))
     # Pack & Pickup
     S["pack"]     = Server("pack",     c=1,   K=math.inf, service_rate=rates.get("pack", rates.get("cashier")))
     S["shelf"]    = Server("shelf",    c=1,   K=caps.get("shelf_N", 20), service_rate=rates.get("shelf", rates.get("cashier")))

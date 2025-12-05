@@ -41,7 +41,10 @@ class Router:
 
     # Timer hooks for policies (e.g., brew cycles), unused in this scaffold
     def on_timer(self, env, **data):
-        pass
+        srv = data.get("server")
+        kind = data.get("kind")
+        if srv is not None and hasattr(srv, "handle_timer"):
+            srv.handle_timer(env, kind=kind)
 
     # Advance after a server departure
     def advance(self, env, job: Any, from_server):

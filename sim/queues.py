@@ -165,3 +165,60 @@ class Server:
         # wait = (departure time) - (service time) - (queue entry)
         wait = now - st - t_arr
         return wait if wait > 0 else 0.0
+
+
+class BatchServer(Server):
+    """
+    Server with a finite batch capacity (e.g., urns/shots) that triggers a
+    downtime/maintenance interval when the batch is exhausted. After downtime,
+    capacity is reset and service resumes.
+
+    Parameters
+    ----------
+    batch_size : int
+        Number of jobs that can be processed before a maintenance/refill is needed.
+    downtime : float
+        Deterministic downtime in seconds to reset the batch.
+    """
+    def __init__(self, name: str, c: int, K: float, service_rate: float | None, batch_size: int, downtime: float):
+        super().__init__(name, c=c, K=K, service_rate=service_rate)
+        self.batch_size = max(1, int(batch_size))
+        self.downtime = max(0.0, downtime)
+        self.remaining = self.batch_size
+        self.in_refill = False
+
+    def _schedule_refill(self, env: Env):
+        """Block service and schedule a timer to finish refill/maintenance."""
+        if self.in_refill or self.downtime <= 0.0:
+            return
+        self.in_refill = True
+        env.schedule(Event(env.t + self.downtime, "timer", {"server": self, "kind": "refill_done"}))
+
+    def handle_timer(self, env: Env, kind: str):
+        """Callback invoked by Router.on_timer when our downtime ends."""
+        if kind != "refill_done":
+            return
+        self.in_refill = False
+        self.remaining = self.batch_size
+        # After refill, immediately try to start waiting work.
+        self.try_start_service(env)
+
+    def try_start_service(self, env: Env):
+        """
+        Override to halt service when the batch is depleted and resume after
+        the scheduled downtime.
+        """
+        while self.queue and self.in_service < self.c:
+            if self.in_refill:
+                break
+            if self.remaining <= 0:
+                self._schedule_refill(env)
+                break
+            job = self.queue.pop(0)
+            st = self.draw_service(job)
+            if hasattr(job, "service_durations"):
+                job.service_durations[self.name] = st
+            self.in_service += 1
+            self.remaining -= 1
+            self._mark_busy(env.t)
+            env.schedule(Event(env.t + st, "departure", {"server": self, "job": job}))

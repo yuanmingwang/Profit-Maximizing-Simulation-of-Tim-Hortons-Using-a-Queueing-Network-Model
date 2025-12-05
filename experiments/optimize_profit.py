@@ -316,7 +316,7 @@ def format_as_scenario(name: str, cfg: Dict):
     print(f'{name.upper()} = {{')
     print(f'    "name": "{name}",')
     print('    "overrides": {')
-    for section in ("service_rates", "capacities", "penalties", "costs", "sim"):
+    for section in ("service_rates", "capacities", "penalties", "costs"):
         block = cfg.get(section, {})
         if not block:
             continue

@@ -61,7 +61,7 @@ class Router:
                 self.on_arrival(env, job, target="pack")
             else:
                 job.t_packed = env.t
-                self.M.note_order_packed(job)
+                self.M.note_order_packed(job, env.t)
         elif from_server.name == "shelf":
             # Customer picks up immediately in this scaffold
             job.t_picked = env.t
@@ -70,9 +70,9 @@ class Router:
                 pickup_wait = max(job.t_picked - job.t_packed, 0.0)
             # Customers with finite patience may forfeit their order if wait too long
             if self._pickup_renege(job, pickup_wait):
-                self.M.note_pickup_renege(job, pickup_wait)
+                self.M.note_pickup_renege(job, pickup_wait, env.t)
             else:
-                self.M.note_pickup(job, pickup_wait)
+                self.M.note_pickup(job, pickup_wait, env.t)
                 self._post_pickup(env, job)
         elif from_server.name == "dine_in":
             # Dine-in visit (including cleaning) finished -> free table
@@ -97,7 +97,7 @@ class Router:
             it.parent_order = order
             target = it.route[0]
             self.on_arrival(env, it, target=target)
-        self.M.note_kitchen_entry(order)
+        self.M.note_kitchen_entry(order, env.t)
 
     def _post_pickup(self, env, order: Order):
         """Route customers after the pickup shelf based on their channel characteristics."""

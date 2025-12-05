@@ -139,7 +139,7 @@ class Server:
         if wait is not None:
             metrics = getattr(env.router, "M", None)
             if metrics is not None:
-                metrics.note_wait(self.name, job, wait)
+                metrics.note_wait(self.name, job, wait, env.t)
         # Advance job through the network
         env.router.advance(env, job, from_server=self)
         # Start next service if possible

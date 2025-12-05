@@ -87,12 +87,125 @@ def avg_nested(results: List[Dict], key: str) -> Dict[str, float]:
             totals[subk] = totals.get(subk, 0.0) + float(val)
     return {subk: totals[subk] / len(results) for subk in totals}
 
+def _interp_point(series: List[Dict[str, float]], target_minute: float) -> Dict[str, float]:
+    """
+    Linearly interpolate cumulative totals at an arbitrary time stamp so that
+    per-replication curves can be averaged on a common time grid.
+    """
+    if not series:
+        return {"time_minutes": target_minute, "profit_total": 0.0, "revenue_total": 0.0}
+    # If the query time precedes our first observation, treat totals as zero.
+    if target_minute <= series[0]["time_minutes"]:
+        return {"time_minutes": target_minute, "profit_total": 0.0, "revenue_total": 0.0}
+    prev = series[0]
+    for pt in series:
+        if pt["time_minutes"] >= target_minute:
+            if pt["time_minutes"] == target_minute or pt["time_minutes"] == prev["time_minutes"]:
+                return {
+                    "time_minutes": target_minute,
+                    "profit_total": pt.get("profit_total", 0.0),
+                    "revenue_total": pt.get("revenue_total", 0.0),
+                }
+            # Linear interpolation between prev and current
+            span = pt["time_minutes"] - prev["time_minutes"]
+            w = (target_minute - prev["time_minutes"]) / span
+            return {
+                "time_minutes": target_minute,
+                "profit_total": prev.get("profit_total", 0.0) + w * (pt.get("profit_total", 0.0) - prev.get("profit_total", 0.0)),
+                "revenue_total": prev.get("revenue_total", 0.0) + w * (pt.get("revenue_total", 0.0) - prev.get("revenue_total", 0.0)),
+            }
+        prev = pt
+    return {
+        "time_minutes": target_minute,
+        "profit_total": series[-1].get("profit_total", 0.0),
+        "revenue_total": series[-1].get("revenue_total", 0.0),
+    }
+
+def aggregate_time_series(results: List[Dict], day_minutes: float, interval_minutes: float) -> List[Dict[str, float]]:
+    """
+    Aggregate per-replication time series on a fixed interval grid so we can
+    plot profit/revenue generated per interval over the simulated day.
+    """
+    if not results:
+        return []
+    if interval_minutes <= 0:
+        interval_minutes = 6.0
+    grid = [i * interval_minutes for i in range(int(math.ceil(day_minutes / interval_minutes)) + 1)]
+    aggregated: List[Dict[str, float]] = []
+    for idx in range(1, len(grid)):
+        end_minute = float(grid[idx])
+        start_minute = float(grid[idx - 1])
+        profit_vals: List[float] = []
+        revenue_vals: List[float] = []
+        for res in results:
+            series = res.get("time_series", [])
+            if not series:
+                continue
+            prev_pt = _interp_point(series, start_minute)
+            curr_pt = _interp_point(series, end_minute)
+            profit_vals.append(curr_pt["profit_total"] - prev_pt["profit_total"])
+            revenue_vals.append(curr_pt["revenue_total"] - prev_pt["revenue_total"])
+        if profit_vals:
+            aggregated.append({
+                "time_minutes": end_minute,
+                "profit_interval": sum(profit_vals) / len(profit_vals),
+                "revenue_interval": sum(revenue_vals) / len(revenue_vals),
+            })
+    return aggregated
+
+def plot_time_series(series: List[Dict[str, float]], warmup_minutes: float, scenario_name: str):
+    """
+    Persist a PNG plot showing profit/revenue generated per interval versus
+    time, with the warm-up cutoff drawn as a vertical line for visual diagnosis.
+    """
+    if not series:
+        return None
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt  # type: ignore
+    except Exception:
+        return None
+    x = [pt["time_minutes"] for pt in series]
+    y_profit = [pt["profit_interval"] for pt in series]
+    y_revenue = [pt["revenue_interval"] for pt in series]
+    plt.figure(figsize=(9, 5))
+    plt.plot(x, y_profit, label="Profit per interval", color="#d97706")
+    plt.plot(x, y_revenue, label="Revenue per interval", color="#2563eb")
+    if warmup_minutes > 0:
+        plt.axvline(warmup_minutes, color="#f59e0b", linestyle="--", label="Warm-up cutoff")
+        # Add the warm-up value as an x-axis tick so the number appears under the axis.
+        ticks, _ = plt.xticks()
+        tick_list = list(ticks)
+        if warmup_minutes not in tick_list:
+            tick_list.append(warmup_minutes)
+        tick_list = sorted(set(tick_list))
+        tick_labels = [f"{int(t)}" if abs(t - int(t)) < 1e-6 else f"{t:.1f}" for t in tick_list]
+        plt.xticks(tick_list, tick_labels)
+    # Keep the plot domain anchored at time=0 to avoid stray negative padding.
+    if x:
+        plt.xlim(left=0, right=max(x) + 100)
+    plt.xlabel("Time (minutes)")
+    plt.ylabel("Dollars per customer")
+    plt.title(f"{scenario_name}: running averages")
+    plt.legend()
+    plt.grid(True, linestyle="--", alpha=0.4)
+    out_dir = os.path.join(ROOT, "experiments", "output")
+    os.makedirs(out_dir, exist_ok=True)
+    safe_name = scenario_name.lower().replace(" ", "_")
+    out_path = os.path.join(out_dir, f"{safe_name}_profit_curve.png")
+    plt.tight_layout()
+    plt.savefig(out_path, dpi=160)
+    plt.close()
+    return out_path
+
 def main():
     """Entry point: drive all scenarios, replications, and report KPIs."""
     cfg = load_cfg()
     exp_cfg = cfg.get("experiments", {})
     replications = max(1, int(exp_cfg.get("replications", 1)))
     confidence = float(exp_cfg.get("confidence_level", 0.95))
+    interval_minutes = float(exp_cfg.get("time_series_interval_minutes", 6.0))
     level_pct = confidence * 100.0
     default_seed = cfg.get("sim", {}).get("seed", 0)
 
@@ -100,13 +213,17 @@ def main():
         sc_base_cfg = apply_overrides(cfg, sc["overrides"])
         scenario_seed = sc_base_cfg.get("sim", {}).get("seed", default_seed)
         seed_range = (scenario_seed, scenario_seed + replications - 1)
+        warmup_minutes = float(sc_base_cfg.get("sim", {}).get("warmup_minutes", 0.0))
         results = []
+        per_seed_profit = []
         for rep in range(replications):
             sc_cfg = copy.deepcopy(sc_base_cfg)
             sc_cfg.setdefault("sim", {})
             # Advance the RNG seed per replication so replications remain iid but scenario-specific seeds stick.
             sc_cfg["sim"]["seed"] = scenario_seed + rep
-            results.append(run_one_day(sc_cfg))
+            res = run_one_day(sc_cfg)
+            results.append(res)
+            per_seed_profit.append((sc_cfg["sim"]["seed"], res.get("profit_per_day", 0.0)))
 
         # Collect KPI distributions across replications so we can report means with CIs.
         profit = mean_ci(series(results, lambda r: r.get("profit_per_day", 0.0)), confidence)
@@ -123,6 +240,9 @@ def main():
         rev_per_customer = mean_ci(series(results, lambda r: r.get("revenue_per_customer", 0.0)), confidence)
         served = avg_nested(results, "served_by_channel")
         utilizations = {k: round(v * 100.0, 1) for k, v in avg_nested(results, "station_utilization").items()}
+        # Build running-mean curve for warm-up diagnostics and plotting
+        agg_series = aggregate_time_series(results, sc_base_cfg.get("sim", {}).get("day_minutes", 0.0), interval_minutes)
+        plot_path = plot_time_series(agg_series, warmup_minutes, sc["name"])
 
         print(f"Scenario: {sc['name']} (replications={replications}, {level_pct:.1f}% CI, seeds {seed_range[0]}-{seed_range[1]})")
         print(f"  Profit/day: ${profit[0]:,.2f} ± ${profit[1]:,.2f}")
@@ -139,6 +259,12 @@ def main():
         print(f"  Avg revenue per customer: ${rev_per_customer[0]:.2f} ± ${rev_per_customer[1]:.2f}")
         print(f"  Served by channel (mean customers/day): { {k: round(v, 1) for k, v in served.items()} }")
         print(f"  Station utilization (mean % busy): {utilizations}")
+        # Per-seed profit table for quick diagnostics
+        print("  Profit by seed:")
+        for seed, val in per_seed_profit:
+            print(f"    seed {seed}: ${val:,.2f}")
+        if plot_path:
+            print(f"  Profit, Revenue, Warm-up plot saved to: {plot_path}")
         print("-")
 
 if __name__ == "__main__":

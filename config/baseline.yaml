@@ -5,8 +5,7 @@ arrival_rates:
   walkin: [
             [0, 150, 0.9],
             [150, 300, 0.6],
-            [300, 420, 0.8],
-            [420, 450, 0.0],
+            [300, 450, 0.8],
             [450, 660, 0.5],
             [660, 840, 0.6],
             [840, 960, 0.3]
@@ -14,8 +13,7 @@ arrival_rates:
   drive_thru: [
                 [0, 150, 1.2],
                 [150, 300, 0.8],
-                [300, 420, 1.1],
-                [420, 450, 0.0],
+                [300, 450, 1.1],
                 [450, 660, 0.6],
                 [660, 840, 0.7],
                 [840, 960, 0.3]
@@ -23,8 +21,7 @@ arrival_rates:
   mobile: [
             [0, 150, 0.5],
             [150, 300, 0.4],
-            [300, 420, 0.6],
-            [420, 450, 0.0],
+            [300, 450, 0.6],
             [450, 660, 0.3],
             [660, 840, 0.4],
             [840, 960, 0.2]
@@ -35,6 +32,24 @@ arrival_rates:
     end: 960
     interval: 5
     promise_offset: 5       # promised pickup time after order placement in minutes
+customers:
+  pickup_patience_minutes:
+    dine_in: 8                # minutes customers wait at pickup before reneging
+    mobile: 5
+order_mix:
+  walkin:
+    beverage: 0.8
+    hotfood: 0.5
+    espresso: 0.5
+  drive_thru:
+    beverage: 0.8
+    hotfood: 0.5
+    espresso: 0.5
+  mobile:
+    beverage: 0.8
+    hotfood: 0.5
+    espresso: 0.5
+# ----------
 # Mean service times **in minutes** (exponential means)
 service_rates:
   cashier: 0.50             # 2 customers/min
@@ -65,7 +80,7 @@ costs:
     espresso: 18.0          # espresso specialists pulling shots
     hotfood: 18.0           # hot-food line cooks/toast stations
     pack: 17.0              # packers assembling bags and trays
-    shelf: 17.0             # staff managing the pickup shelf
+    shelf: 0.0              # staff managing the pickup shelf
     dine_in: 0.0            # empty tables incur no labor cost (customers seat themselves)
     dine_in_clean: 16.0     # bussers responsible for cleaning tables
     _default_: 17.0         # fallback wage for any unspecified station
@@ -74,27 +89,11 @@ penalties:
   drivethru_p90_breach: 0.2
   pickup_renege: 0.0
   balk_loss_pct: 0.4          # lost margin fraction per balked customer
-customers:
-  pickup_patience_minutes:
-    dine_in: 8                # minutes customers wait at pickup before reneging
-    mobile: 5
-order_mix:
-  walkin:
-    beverage: 0.8
-    hotfood: 0.5
-    espresso: 0.5
-  drive_thru:
-    beverage: 0.8
-    hotfood: 0.5
-    espresso: 0.5
-  mobile:
-    beverage: 0.8
-    hotfood: 0.5
-    espresso: 0.5
 experiments:
-  replications: 10
+  replications: 5
   confidence_level: 0.95
+  time_series_interval_minutes: 3  # bin width for profit/revenue interval plot
 sim:
   day_minutes: 960            # 6AM–10PM operating window
-  warmup_minutes: 0           # minutes to ignore for warmup (if you add one)
+  warmup_minutes: 30           # minutes to ignore for warmup (if you add one)
   seed: 3                     # RNG seed for reproducibility

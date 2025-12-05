@@ -12,220 +12,144 @@ BASELINE = {
     "overrides": {},  # override config keys here per scenario
 }
 
-LEGACY_BASELINE = {
-    "name": "legacy_baseline",
+BASELINE_OPTIMIZED = {
+    "name": "baseline_optimized",
     "overrides": {
-        "arrival_rates": {
-            "walkin": [
-                [0, 150, 0.75],
-                [150, 300, 0.5],
-                [300, 420, 0.65],
-                [420, 450, 0.0],
-                [450, 660, 0.45],
-                [660, 840, 0.5],
-                [840, 960, 0.25],
-            ],
-            "drive_thru": [
-                [0, 150, 1.0],
-                [150, 300, 0.7],
-                [300, 420, 1.0],
-                [420, 450, 0.0],
-                [450, 660, 0.55],
-                [660, 840, 0.6],
-                [840, 960, 0.25],
-            ],
-            "mobile": [
-                [0, 150, 0.4],
-                [150, 300, 0.35],
-                [300, 420, 0.5],
-                [420, 450, 0.0],
-                [450, 660, 0.25],
-                [660, 840, 0.3],
-                [840, 960, 0.15],
-            ],
-            "mobile_promises": {
-                "start": 0,
-                "end": 960,
-                "interval": 5,
-                "promise_offset": 7,
-            },
-        },
-        "service_rates": {
-            "cashier": 0.55,
-            "window": 0.60,
-            "beverage": 0.40,
-            "espresso": 0.30,
-            "hotfood": 0.40,
-            "pack": 0.25,
-            "shelf": 0.03,
-            "dine_in": 6.5,
-            "table_cleaning": 0.45,
-        },
-        "capacities": {
-            "shelf_N": 18,
-            "espresso_c": 1,
-            "hotfood_c": 2,
-            "beverage_c": 2,
-            "dine_in_tables": 18,
-            "table_cleaners": 2,
-        },
-        "costs": {
-            "price_coffee": 2.00,
-            "price_espresso": 4.00,
-            "price_hotfood": 3.50,
-            "cogs_pct": 0.38,
-            "wages_per_hour": {
-                "cashier": 16.5,
-                "window": 16.5,
-                "beverage": 17.5,
-                "espresso": 17.5,
-                "hotfood": 17.5,
-                "pack": 16.5,
-                "shelf": 16.5,
-                "dine_in": 0.0,
-                "dine_in_clean": 15.5,
-                "_default_": 16.5,
-            },
-        },
-        "penalties": {
-            "mobile_late": 0.75,
-            "drivethru_p90_breach": 0.3,
-            "pickup_renege": 0.5,
-            "balk_loss_pct": 0.3,
-        },
-        "customers": {
-            "pickup_patience_minutes": {
-                "dine_in": 7,
-                "mobile": 4,
-            }
-        },
-        "sim": {
-            "day_minutes": 960,
-            "warmup_minutes": 0,
-            "seed": 3,
-        },
-    },
-}
-
-HIGH_CLEANING_LOAD = {
-    "name": "dine_in_stress",
-    "overrides": {
-        "service_rates": {
-            "dine_in": 7.0,
-            "table_cleaning": 0.6,
-        },
-        "capacities": {
-            "dine_in_tables": 12,
-            "table_cleaners": 1,
-        },
-        "sim": {
-            "day_minutes": 960,
-            "warmup_minutes": 0,
-            "seed": 3,
-        },
-    },
-}
-
-PROFIT_FOCUS = {
-    "name": "profit_focus",
-    "overrides": {
-        "capacities": {
-            "espresso_c": 2,
-            "hotfood_c": 2,
-            "beverage_c": 2,
-            "dine_in_tables": 12,
-            "table_cleaners": 1,
-        },
         "service_rates": {
             "cashier": 0.45,
-            "window": 0.45,
-            "hotfood": 0.30,
-            "pack": 0.18,
-            "shelf": 0.02,
-            "dine_in": 5.5,
-            "table_cleaning": 0.28,
-        },
-        "penalties": {
-            "mobile_late": 0.5,
-            "drivethru_p90_breach": 0.2,
-            "pickup_renege": 0.0,
-            "balk_loss_pct": 0.4,
-        },
-        "customers": {
-            "pickup_patience_minutes": {
-                "dine_in": 8,
-                "mobile": 5,
-            }
-        },
-        "sim": {
-            "day_minutes": 960,
-            "warmup_minutes": 0,
-            "seed": 3,
-        },
-    },
-}
-
-OPTIMIZE_PROFIT_SEARCH1 = {
-    "name": "optimize_profit_search1",
-    "overrides": {
-        "service_rates": {
-            "cashier": 0.4391533230389236,
-            "window": 0.43814917855302943,
-            "hotfood": 0.34103500867802417,
-            "pack": 0.20040422208687653,
-            "dine_in": 6.951522523373763,
-            "table_cleaning": 0.31188987247370076,
-        },
-        "capacities": {
-            "beverage_c": 1,
-            "espresso_c": 1,
-            "hotfood_c": 2,
-            "dine_in_tables": 17,
-            "table_cleaners": 3,
-        },
-        "penalties": {
-            "balk_loss_pct": 0.3781627770236142,
-        },
-        "sim": {
-            "seed": 3,
-        },
-    },
-}
-
-OPTIMIZE_PROFIT_SEARCH2 = {
-    "name": "optimize_profit_search2",
-    "overrides": {
-        "service_rates": {
-            "cashier": 0.4004430730505888,
-            "window": 0.5306344949960384,
+            "window": 0.5,
             "beverage": 0.33,
             "espresso": 0.25,
-            "hotfood": 0.3383694596142368,
-            "pack": 0.2355278968200934,
+            "hotfood": 0.33,
+            "pack": 0.2,
             "shelf": 0.02,
-            "dine_in": 6.784510658169075,
-            "table_cleaning": 0.28956583570568595,
+            "dine_in": 6.0,
+            "table_cleaning": 0.33,
         },
         "capacities": {
             "shelf_N": 20,
-            "espresso_c": 2,
-            "hotfood_c": 3,
+            "espresso_c": 1,
+            "hotfood_c": 1,
             "beverage_c": 1,
-            "dine_in_tables": 17,
+            "dine_in_tables": 14,
             "table_cleaners": 1,
         },
         "penalties": {
-            "mobile_late": 0.5,
+            "mobile_late": 0.4,
             "drivethru_p90_breach": 0.2,
             "pickup_renege": 0.0,
-            "balk_loss_pct": 0.25682326316887866,
+            "balk_loss_pct": 0.2,
+        },
+        "costs": {
+            "price_coffee": 3.75,
+            "price_espresso": 5.5,
+            "price_hotfood": 5.0,
+            "cogs_pct": 0.35,
+            "wages_per_hour": {
+                "cashier": 16.0,
+                "window": 16.0,
+                "beverage": 16.0,
+                "espresso": 16.0,
+                "hotfood": 16.0,
+                "pack": 16.0,
+                "shelf": 0.0,
+                "dine_in": 0.0,
+                "dine_in_clean": 16.0,
+                "_default_": 17.0,
+            },
         },
         "sim": {
             "day_minutes": 960,
-            "warmup_minutes": 0,
+            "warmup_minutes": 30,
             "seed": 3,
         },
     },
 }
 
-SCENARIOS = [BASELINE, LEGACY_BASELINE, HIGH_CLEANING_LOAD, PROFIT_FOCUS, OPTIMIZE_PROFIT_SEARCH1, OPTIMIZE_PROFIT_SEARCH2]
+HIGH_LOAD = {
+    "name": "high_load",
+    "overrides": {
+        "service_rates": {
+            "cashier": 0.8,
+            "window": 1,
+            "beverage": 1,
+            "espresso": 1,
+            "hotfood": 1,
+            "pack": 0.5,
+            "shelf": 0.5,
+            "dine_in": 10,
+            "table_cleaning": 1.5,
+        },
+        "capacities": {
+            "shelf_N": 20,
+            "espresso_c": 1,
+            "hotfood_c": 1,
+            "beverage_c": 2,
+            "dine_in_tables": 12,
+            "table_cleaners": 1,
+        },
+        "sim": {
+            "day_minutes": 960,
+            "warmup_minutes": 30,
+            "seed": 3,
+        },
+    },
+}
+
+HIGH_LOAD_OPTIMIZED = {
+    "name": "high_load_optimized",
+    "overrides": {
+        "service_rates": {
+            "cashier": 0.8,
+            "window": 0.8,
+            "beverage": 1,
+            "espresso": 1,
+            "hotfood": 1,
+            "pack": 0.55,
+            "shelf": 0.4,
+            "dine_in": 8.0,
+            "table_cleaning": 1.2000000000000002,
+        },
+        "capacities": {
+            "shelf_N": 20,
+            "espresso_c": 1,
+            "hotfood_c": 1,
+            "beverage_c": 2,
+            "dine_in_tables": 13,
+            "table_cleaners": 1,
+        },
+        "penalties": {
+            "mobile_late": 0.4,
+            "drivethru_p90_breach": 0.2,
+            "pickup_renege": 0.0,
+            "balk_loss_pct": 0.2,
+        },
+        "costs": {
+            "price_coffee": 3.75,
+            "price_espresso": 5.5,
+            "price_hotfood": 5.0,
+            "cogs_pct": 0.35,
+            "wages_per_hour": {
+                "cashier": 16.0,
+                "window": 16.0,
+                "beverage": 16.0,
+                "espresso": 16.0,
+                "hotfood": 16.0,
+                "pack": 16.0,
+                "shelf": 0.0,
+                "dine_in": 0.0,
+                "dine_in_clean": 16.0,
+                "_default_": 17.0,
+            },
+        },
+        "sim": {
+            "day_minutes": 960,
+            "warmup_minutes": 30,
+            "seed": 3,
+        },
+    },
+}
+
+
+# SCENARIOS = [BASELINE, LEGACY_BASELINE, HIGH_CLEANING_LOAD, PROFIT_FOCUS, OPTIMIZE_PROFIT_SEARCH1, OPTIMIZE_PROFIT_SEARCH2, WARM_UP_TEST,HIGH_LOAD]
+SCENARIOS = [BASELINE, BASELINE_OPTIMIZED, HIGH_LOAD, HIGH_LOAD_OPTIMIZED]

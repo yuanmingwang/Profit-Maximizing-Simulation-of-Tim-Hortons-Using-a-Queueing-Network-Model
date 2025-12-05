@@ -45,7 +45,7 @@ class DineInServer(Server):
         if wait is not None:
             metrics = getattr(env.router, "M", None)
             if metrics is not None:
-                metrics.note_wait(self.name, job, wait)
+                metrics.note_wait(self.name, job, wait, env.t)
         env.router.advance(env, job, from_server=self)
         # Cleaning queue represents bussers wiping the table; capacity may block.
         ok = self.cleaning_server.enqueue(env, job)

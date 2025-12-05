@@ -21,6 +21,7 @@ from collections import defaultdict
 class Metrics:
     def __init__(self, cfg: dict):
         self.cfg = cfg
+        self.warmup_sec = cfg.get("sim", {}).get("warmup_minutes", 0) * 60.0
         self.pickups = 0
         self.kitchen_entries = 0
         self.wait_totals = defaultdict(float)     # accumulated front counter waits per channel
@@ -37,6 +38,11 @@ class Metrics:
         self.pickup_reneges = defaultdict(int)
         self.dine_in_customers = 0
         self.dine_in_time_total = 0.0
+        # Raw counters (include warm-up) for time-series diagnostics
+        self.raw_revenue_total = 0.0
+        self.raw_cogs_total = 0.0
+        self.raw_penalty_total = 0.0
+        self.raw_customers = 0
         cost_cfg = cfg.get("costs", {})
         self.price_map = {
             "beverage": cost_cfg.get("price_coffee", 0.0),
@@ -46,14 +52,31 @@ class Metrics:
         self.cogs_pct = cost_cfg.get("cogs_pct", 0.0)
         self.wages_per_hour = cost_cfg.get("wages_per_hour", {})
         self.stations: Dict[str, Any] = {}
+        self.labor_rate_per_sec = 0.0
+        self.time_series: list[Dict[str, float]] = []
 
-    def note_kitchen_entry(self, order):
+    def _active(self, t: float) -> bool:
+        """Return True if t is beyond the warm-up period."""
+        return t >= self.warmup_sec
+
+    def note_kitchen_entry(self, order, t: float):
+        if not self._active(t):
+            return
         self.kitchen_entries += 1
 
     def attach_stations(self, stations: Dict[str, Any]):
+        """Attach station set and compute per-second labor burn rate for raw tracking."""
         self.stations = stations
+        default_wage = self.wages_per_hour.get("_default_", 0.0)
+        total_wage_per_hour = 0.0
+        for name, st in stations.items():
+            wage_hr = self.wages_per_hour.get(name, default_wage)
+            total_wage_per_hour += wage_hr * getattr(st, "c", 1)
+        self.labor_rate_per_sec = total_wage_per_hour / 3600.0
 
-    def note_wait(self, server_name: str, job, wait: float):
+    def note_wait(self, server_name: str, job, wait: float, t: float):
+        if not self._active(t):
+            return
         cust = getattr(job, "customer", None)
         if cust is None:
             return
@@ -65,7 +88,9 @@ class Metrics:
             self.wait_totals[channel] += wait
             self.wait_counts[channel] += 1
 
-    def note_order_packed(self, order):
+    def note_order_packed(self, order, t: float):
+        if not self._active(t):
+            return
         cust = getattr(order, "customer", None)
         if cust is None or cust.channel != "mobile":
             return
@@ -77,31 +102,44 @@ class Metrics:
             self.mobile_late += 1
             if penalty:
                 self.penalties["mobile_late"] += penalty
+                self.raw_penalty_total += penalty
         else:
             self.mobile_ready_on_time += 1
 
-    def note_pickup(self, order, pickup_wait: float):
+    def note_pickup(self, order, pickup_wait: float, t: float):
+        order_value = order.total_price()
+        if order_value == 0.0:
+            order_value = sum(self.price_map.get(it.kind, 0.0) for it in order.items)
+        # Raw counters for warm-up diagnostics
+        self.raw_revenue_total += order_value
+        self.raw_cogs_total += order_value * self.cogs_pct
+        self.raw_customers += 1
+        self._record_time_series(t)
+
+        if not self._active(t):
+            return
         self.pickups += 1
         cust = getattr(order, "customer", None)
         channel = cust.channel if cust else "unknown"
         self.channel_served[channel] += 1
         self.pickup_wait_totals[channel] += pickup_wait
-        order_value = order.total_price()
-        # Fall back to price map if items missing
-        if order_value == 0.0:
-            order_value = sum(self.price_map.get(it.kind, 0.0) for it in order.items)
         self.revenue_total += order_value
         self.cogs_total += order_value * self.cogs_pct
 
-    def note_pickup_renege(self, order, pickup_wait: float):
+    def note_pickup_renege(self, order, pickup_wait: float, t: float):
+        if not self._active(t):
+            return
         cust = getattr(order, "customer", None)
         channel = cust.channel if cust else "unknown"
         self.pickup_reneges[channel] += 1
         penalty = self.cfg.get("penalties", {}).get("pickup_renege", 0.0)
         if penalty:
             self.penalties["pickup_renege"] += penalty
+            self.raw_penalty_total += penalty
 
     def note_block(self, t, station, job):
+        if not self._active(t):
+            return
         cust = getattr(job, "customer", None)
         if cust is None:
             return
@@ -111,7 +149,9 @@ class Metrics:
         if pct:
             order_value = self._estimate_order_value(job)
             if order_value > 0:
-                self.penalties["balk_loss"] += order_value * pct
+                penalty_val = order_value * pct
+                self.penalties["balk_loss"] += penalty_val
+                self.raw_penalty_total += penalty_val
 
     def _estimate_order_value(self, entity) -> float:
         if hasattr(entity, "total_price"):
@@ -130,14 +170,35 @@ class Metrics:
 
     def note_dinein_start(self, order):
         """Track when a dine-in guest seizes a table."""
+        # Seat starts at post-pickup time; warm-up handled by caller
         self.dine_in_customers += 1
 
     def note_dinein_departure(self, order, t_depart: float):
         """Accumulate total dine-in table occupancy (including cleaning time)."""
+        if not self._active(t_depart):
+            return
         if order.t_seated is None:
             return
         dwell = max(t_depart - order.t_seated, 0.0)
         self.dine_in_time_total += dwell
+
+    def _record_time_series(self, t: float):
+        """
+        Capture a cumulative point for warm-up plots using raw counters (includes warm-up):
+          - cumulative revenue to time t
+          - cumulative profit to time t (revenue - cogs - penalties - labor burned to time t)
+          - cumulative customers to time t
+        """
+        if self.raw_customers <= 0:
+            return
+        labor_cost_raw = self.labor_rate_per_sec * t
+        profit_raw = self.raw_revenue_total - self.raw_cogs_total - self.raw_penalty_total - labor_cost_raw
+        self.time_series.append({
+            "time_minutes": t / 60.0,
+            "revenue_total": self.raw_revenue_total,
+            "profit_total": profit_raw,
+            "customers_total": self.raw_customers,
+        })
 
     def summary(self) -> Dict:
         day_minutes = self.cfg["sim"]["day_minutes"]
@@ -205,4 +266,6 @@ class Metrics:
             "dine_in_customers": self.dine_in_customers,
             "avg_dine_in_time_minutes": avg_dine_in_time,
             "revenue_per_customer": rev_per_customer,
+            # Raw time-series for warm-up diagnostics and plotting (includes warm-up period).
+            "time_series": list(self.time_series),
         }

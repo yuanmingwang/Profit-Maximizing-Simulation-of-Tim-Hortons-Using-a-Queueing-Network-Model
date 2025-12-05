@@ -93,7 +93,8 @@ def make_stations(cfg: dict) -> Dict[str, Server]:
     S = {}
     # Front-end
     S["cashier"]  = Server("cashier",  c=1, K=math.inf, service_rate=rates.get("cashier"))
-    S["window"]   = Server("window",   c=1, K=math.inf, service_rate=rates.get("window", rates.get("cashier")))
+    # Drive-thru order window with finite lane capacity (balking when full)
+    S["window"]   = Server("window",   c=1, K=caps.get("drive_thru_lane_order", math.inf), service_rate=rates.get("window", rates.get("cashier")))
     # Kitchen
     # Espresso with maintenance cycles (limited shots then downtime)
     espresso_batch = cfg.get("espresso", {}).get("batch_size", cfg.get("capacities", {}).get("espresso_batch_size", None))
@@ -126,6 +127,13 @@ def make_stations(cfg: dict) -> Dict[str, Server]:
         )
     else:
         S["beverage"] = Server("beverage", c=caps.get("beverage_c",2), K=math.inf, service_rate=rates.get("beverage"))
+    # Drive-thru pickup window with finite staging lane
+    S["drive_thru_pickup"] = Server(
+        "drive_thru_pickup",
+        c=1,
+        K=caps.get("drive_thru_lane_pickup", math.inf),
+        service_rate=rates.get("drive_thru_pickup", rates.get("window")),
+    )
     # Pack & Pickup
     S["pack"]     = Server("pack",     c=1,   K=math.inf, service_rate=rates.get("pack", rates.get("cashier")))
     S["shelf"]    = Server("shelf",    c=1,   K=caps.get("shelf_N", 20), service_rate=rates.get("shelf", rates.get("cashier")))

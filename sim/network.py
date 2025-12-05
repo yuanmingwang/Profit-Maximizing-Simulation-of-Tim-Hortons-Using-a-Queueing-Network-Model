@@ -56,15 +56,24 @@ class Router:
                 # all items ready -> enqueue to PACK
                 self.on_arrival(env, order, target="pack")
         elif from_server.name == "pack":
-            # Attempt to move packed order to shelf (finite K can block)
-            ok = self.S["shelf"].enqueue(env, job)
-            if not ok:
-                # If shelf is full, re‑enqueue pack (primitive blocking)
-                # A more precise model would hold the pack server busy.
-                self.on_arrival(env, job, target="pack")
+            # Drive-thru orders go to pickup window; others to shelf
+            cust = getattr(job, "customer", None)
+            if cust and cust.channel == "drive_thru":
+                target_srv = self.S.get("drive_thru_pickup")
+                if target_srv:
+                    ok = target_srv.enqueue(env, job)
+                    if not ok:
+                        self.M.note_block(env.t, "drive_thru_pickup", job)
+                        # If pickup lane is full, send back to pack queue to retry
+                        self.on_arrival(env, job, target="pack")
+                    else:
+                        job.t_packed = env.t
+                        self.M.note_order_packed(job, env.t)
+                else:
+                    # Fallback: if pickup window missing, use shelf
+                    self._enqueue_shelf(env, job)
             else:
-                job.t_packed = env.t
-                self.M.note_order_packed(job, env.t)
+                self._enqueue_shelf(env, job)
         elif from_server.name == "shelf":
             # Customer picks up immediately in this scaffold
             job.t_picked = env.t
@@ -77,6 +86,14 @@ class Router:
             else:
                 self.M.note_pickup(job, pickup_wait, env.t)
                 self._post_pickup(env, job)
+        elif from_server.name == "drive_thru_pickup":
+            # Compute pickup wait relative to pack completion
+            job.t_picked = env.t
+            pickup_wait = 0.0
+            if job.t_packed is not None:
+                pickup_wait = max(job.t_picked - job.t_packed, 0.0)
+            self.M.note_pickup(job, pickup_wait, env.t)
+            self._post_pickup(env, job)
         elif from_server.name == "dine_in":
             # Dine-in visit (including cleaning) finished -> free table
             job.t_left_dine_in = env.t
@@ -101,6 +118,17 @@ class Router:
             target = it.route[0]
             self.on_arrival(env, it, target=target)
         self.M.note_kitchen_entry(order, env.t)
+
+    def _enqueue_shelf(self, env, order: Order):
+        """Helper to push packed orders to the shelf with blocking handling."""
+        ok = self.S["shelf"].enqueue(env, order)
+        if not ok:
+            self.M.note_block(env.t, "shelf", order)
+            # If shelf is full, re‑enqueue pack (primitive blocking)
+            self.on_arrival(env, order, target="pack")
+        else:
+            order.t_packed = env.t
+            self.M.note_order_packed(order, env.t)
 
     def _post_pickup(self, env, order: Order):
         """Route customers after the pickup shelf based on their channel characteristics."""

@@ -54,6 +54,7 @@ order_mix:
 service_rates:
   cashier: 0.50             # 2 customers/min
   window: 0.50              # drive-thru order station
+  drive_thru_pickup: 0.30   # handoff/payment at drive-thru pickup window
   beverage: 0.33            # brewed coffee urns
   beverage_refill: 2.0      # minutes of downtime to refill depleted urns
   espresso: 0.25
@@ -65,6 +66,8 @@ service_rates:
   table_cleaning: 0.33      # mean cleaning time per table (~3 tables/min)
 capacities:
   shelf_N: 20               # pickup shelf capacity (acts like a finite buffer)
+  drive_thru_lane_order: 10 # max vehicles in lane before balk at order window
+  drive_thru_lane_pickup: 10 # max vehicles queuing at pickup window
   beverage_urn_size: 25     # number of pours before urn refill downtime
   espresso_c: 1             # number of parallel espresso servers
   espresso_batch_size: 40   # number of shots before espresso maintenance

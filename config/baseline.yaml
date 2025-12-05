@@ -93,7 +93,8 @@ costs:
     _default_: 17.0         # fallback wage for any unspecified station
 penalties:
   mobile_late: 0.5            # penalty per late mobile order
-  drivethru_p90_breach: 0.2
+  drivethru_p90_breach: 0.2   # penalty per drive-thru wait above p90 target
+  drivethru_p90_target_minutes: 1.0  # p90 target threshold (minutes)
   pickup_renege: 0.0
   balk_loss_pct: 0.4          # lost margin fraction per balked customer
 experiments:

@@ -17,6 +17,7 @@
 from __future__ import annotations
 from typing import Dict, Any
 from collections import defaultdict
+import math
 
 class Metrics:
     def __init__(self, cfg: dict):
@@ -26,6 +27,7 @@ class Metrics:
         self.kitchen_entries = 0
         self.wait_totals = defaultdict(float)     # accumulated front counter waits per channel
         self.wait_counts = defaultdict(int)       # service counts for averaging front waits
+        self.wait_samples = defaultdict(list)     # raw wait samples per channel for percentile/penalties
         self.pickup_wait_totals = defaultdict(float)  # post-pack waits separated by channel
         self.channel_served = defaultdict(int)    # throughput per channel
         self.mobile_ready_on_time = 0
@@ -84,9 +86,11 @@ class Metrics:
         if server_name == "cashier" and channel == "walkin":
             self.wait_totals[channel] += wait
             self.wait_counts[channel] += 1
+            self.wait_samples[channel].append(wait)
         elif server_name == "window" and channel == "drive_thru":
             self.wait_totals[channel] += wait
             self.wait_counts[channel] += 1
+            self.wait_samples[channel].append(wait)
 
     def note_order_packed(self, order, t: float):
         if not self._active(t):
@@ -225,6 +229,23 @@ class Metrics:
             labor_cost = labor_sched_minutes * wage_per_min
         penalties_total = sum(self.penalties.values())
         profit = self.revenue_total - self.cogs_total - labor_cost - penalties_total
+        # Drive-thru p90 and breach penalties (per-customer if wait exceeds target)
+        drive_p90 = 0.0
+        drive_breaches = 0
+        if self.wait_samples.get("drive_thru"):
+            waits = sorted(self.wait_samples["drive_thru"])
+            idx = int(math.ceil(0.9 * len(waits))) - 1
+            idx = max(0, min(idx, len(waits) - 1))
+            drive_p90 = waits[idx] / 60.0
+            target_min = self.cfg.get("penalties", {}).get("drivethru_p90_target_minutes", None)
+            penalty_amt = self.cfg.get("penalties", {}).get("drivethru_p90_breach", 0.0)
+            if target_min is not None and penalty_amt:
+                target_sec = target_min * 60.0
+                drive_breaches = sum(1 for w in waits if w > target_sec)
+                if drive_breaches > 0:
+                    self.penalties["drivethru_p90_breach"] += penalty_amt * drive_breaches
+                    penalties_total += penalty_amt * drive_breaches
+                    profit -= penalty_amt * drive_breaches
         avg_waits = {}
         for channel in ("walkin", "drive_thru"):
             total = self.wait_totals.get(channel, 0.0)
@@ -268,4 +289,6 @@ class Metrics:
             "revenue_per_customer": rev_per_customer,
             # Raw time-series for warm-up diagnostics and plotting (includes warm-up period).
             "time_series": list(self.time_series),
+            "drive_thru_p90_wait_minutes": drive_p90,
+            "drive_thru_breach_count": drive_breaches,
         }

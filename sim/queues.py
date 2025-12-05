@@ -222,3 +222,25 @@ class BatchServer(Server):
             self.remaining -= 1
             self._mark_busy(env.t)
             env.schedule(Event(env.t + st, "departure", {"server": self, "job": job}))
+
+
+class PickupServer(Server):
+    """
+    Pickup server that enforces FIFO pickup of packed orders. It assumes the
+    order has a customer/cid and a t_packed timestamp; jobs without t_packed
+    are deferred until they are marked ready. This prevents "skipping the line"
+    and keeps customers waiting in order at the pickup location.
+    """
+    def try_start_service(self, env: Env):
+        while self.queue and self.in_service < self.c:
+            job = self.queue[0]
+            # Guard: do not serve until pack stage marked the order ready
+            if getattr(job, "t_packed", None) is None:
+                break
+            self.queue.pop(0)
+            st = self.draw_service(job)
+            if hasattr(job, "service_durations"):
+                job.service_durations[self.name] = st
+            self.in_service += 1
+            self._mark_busy(env.t)
+            env.schedule(Event(env.t + st, "departure", {"server": self, "job": job}))

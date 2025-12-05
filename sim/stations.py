@@ -18,7 +18,7 @@
 from __future__ import annotations
 import math
 from typing import Dict
-from .queues import Server, BatchServer
+from .queues import Server, BatchServer, PickupServer
 
 class DineInServer(Server):
     """
@@ -128,7 +128,7 @@ def make_stations(cfg: dict) -> Dict[str, Server]:
     else:
         S["beverage"] = Server("beverage", c=caps.get("beverage_c",2), K=math.inf, service_rate=rates.get("beverage"))
     # Drive-thru pickup window with finite staging lane
-    S["drive_thru_pickup"] = Server(
+    S["drive_thru_pickup"] = PickupServer(
         "drive_thru_pickup",
         c=1,
         K=caps.get("drive_thru_lane_pickup", math.inf),
@@ -136,7 +136,8 @@ def make_stations(cfg: dict) -> Dict[str, Server]:
     )
     # Pack & Pickup
     S["pack"]     = Server("pack",     c=1,   K=math.inf, service_rate=rates.get("pack", rates.get("cashier")))
-    S["shelf"]    = Server("shelf",    c=1,   K=caps.get("shelf_N", 20), service_rate=rates.get("shelf", rates.get("cashier")))
+    # Pickup shelf modeled as FIFO pickup server; customers wait until their packed order reaches head of queue.
+    S["shelf"]    = PickupServer("shelf",    c=1,   K=caps.get("shelf_N", 20), service_rate=rates.get("shelf", rates.get("cashier")))
     # Dine-in seating with explicit cleaning stage (tables remain blocked until busser finishes)
     num_tables = dine_cfg.get("tables", caps.get("dine_in_tables", 25))
     cleaners = caps.get("table_cleaners", 1)

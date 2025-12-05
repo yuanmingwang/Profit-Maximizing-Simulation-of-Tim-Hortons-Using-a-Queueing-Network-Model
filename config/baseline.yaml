@@ -33,8 +33,8 @@ arrival_rates:
     interval: 5
     promise_offset: 5       # promised pickup time after order placement in minutes
 customers:
-  pickup_patience_minutes:
-    dine_in: 8                # minutes customers wait at pickup before reneging
+  pickup_patience_minutes:  # minutes customers wait at pickup before reneging
+    dine_in: 1000           # dine_in customer will not renege
     mobile: 5
 order_mix:
   walkin:
@@ -54,7 +54,7 @@ order_mix:
 service_rates:
   cashier: 0.50             # 2 customers/min
   window: 0.50              # drive-thru order station
-  drive_thru_pickup: 0.30   # handoff/payment at drive-thru pickup window
+  drive_thru_pickup: 0.167  # handoff/payment at drive-thru pickup window
   beverage: 0.33            # brewed coffee urns
   beverage_refill: 2.0      # minutes of downtime to refill depleted urns
   espresso: 0.25
@@ -67,7 +67,7 @@ service_rates:
 capacities:
   shelf_N: 20               # pickup shelf capacity (acts like a finite buffer)
   drive_thru_lane_order: 10 # max vehicles in lane before balk at order window
-  drive_thru_lane_pickup: 10 # max vehicles queuing at pickup window
+  drive_thru_lane_pickup: 3 # max vehicles queuing at pickup window
   beverage_urn_size: 25     # number of pours before urn refill downtime
   espresso_c: 1             # number of parallel espresso servers
   espresso_batch_size: 40   # number of shots before espresso maintenance

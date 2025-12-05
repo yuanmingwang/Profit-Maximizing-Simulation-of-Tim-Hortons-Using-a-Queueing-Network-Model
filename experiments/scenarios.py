@@ -71,8 +71,11 @@ HIGH_LOAD = {
         "service_rates": {
             "cashier": 0.8,
             "window": 1,
+            "drive_thru_pickup": 0.5,
             "beverage": 1,
+            "beverage_refill": 2.0,
             "espresso": 1,
+            "espresso_maintenance": 5.0,
             "hotfood": 1,
             "pack": 0.5,
             "shelf": 0.5,
@@ -81,7 +84,11 @@ HIGH_LOAD = {
         },
         "capacities": {
             "shelf_N": 20,
+            "drive_thru_lane_order": 5,
+            "drive_thru_lane_pickup": 3,
+            "beverage_urn_size": 25,
             "espresso_c": 1,
+            "espresso_batch_size": 40,
             "hotfood_c": 1,
             "beverage_c": 2,
             "dine_in_tables": 12,

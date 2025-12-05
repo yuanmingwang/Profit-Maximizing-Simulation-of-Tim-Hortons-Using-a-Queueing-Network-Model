@@ -75,7 +75,7 @@ class Router:
             else:
                 self._enqueue_shelf(env, job)
         elif from_server.name == "shelf":
-            # Customer picks up immediately in this scaffold
+            # Shelf pickup: order has reached head of FIFO shelf queue
             job.t_picked = env.t
             pickup_wait = 0.0
             if job.t_packed is not None:

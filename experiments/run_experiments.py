@@ -10,7 +10,7 @@ other analysis pipelines as needed.
 from __future__ import annotations
 import copy, yaml, os, sys, math
 from typing import Dict, List, Callable
-from statistics import mean, stdev, NormalDist
+from statistics import mean, stdev, variance, NormalDist
 try:
     # When executed as a module: python -m experiments.run_experiments
     from .scenarios import SCENARIOS  # type: ignore
@@ -60,17 +60,33 @@ def apply_overrides(cfg: Dict, overrides: Dict) -> Dict:
     return new
 
 def mean_ci(values: List[float], confidence_level: float) -> tuple[float, float]:
-    """Return (mean, half-width) for a normal-approximation CI."""
+    """
+    Return (mean, half-width) using a t-distribution critical value (falls back
+    to normal only if SciPy is unavailable).
+    """
     if not values:
         return 0.0, 0.0
     mu = mean(values)
-    if len(values) < 2:
+    n = len(values)
+    if n < 2:
         return mu, 0.0
     level = min(max(confidence_level, 0.0), 0.999999)
     alpha = 1.0 - level
-    z = NormalDist().inv_cdf(1 - alpha / 2.0)
-    half = z * (stdev(values) / math.sqrt(len(values)))
+    # Use t critical value with df = n-1
+    try:  # pragma: no cover
+        from scipy.stats import t  # type: ignore
+        tcrit = t.ppf(1 - alpha / 2.0, n - 1)
+    except Exception:
+        # Fallback to normal if SciPy unavailable; this is conservative when n is large.
+        tcrit = NormalDist().inv_cdf(1 - alpha / 2.0)
+    half = tcrit * (stdev(values) / math.sqrt(n))
     return mu, half
+
+def sample_stddev(values: List[float]) -> float:
+    """Return sample standard deviation or 0 if insufficient data."""
+    if len(values) < 2:
+        return 0.0
+    return stdev(values)
 
 def series(results: List[Dict], extractor: Callable[[Dict], float]) -> List[float]:
     """Collect a numeric series from each replication result."""
@@ -228,6 +244,7 @@ def main():
         # Collect KPI distributions across replications so we can report means with CIs.
         profit = mean_ci(series(results, lambda r: r.get("profit_per_day", 0.0)), confidence)
         revenue = mean_ci(series(results, lambda r: r.get("revenue_per_day", 0.0)), confidence)
+        profit_sd = sample_stddev(series(results, lambda r: r.get("profit_per_day", 0.0)))
         labor = mean_ci(series(results, lambda r: r.get("labor_cost_per_day", 0.0)), confidence)
         walkin_wait = mean_ci(series(results, lambda r: r.get("avg_front_wait_minutes", {}).get("walkin", 0.0)), confidence)
         drive_wait = mean_ci(series(results, lambda r: r.get("avg_front_wait_minutes", {}).get("drive_thru", 0.0)), confidence)
@@ -245,6 +262,11 @@ def main():
         plot_path = plot_time_series(agg_series, warmup_minutes, sc["name"])
 
         print(f"Scenario: {sc['name']} (replications={replications}, {level_pct:.1f}% CI, seeds {seed_range[0]}-{seed_range[1]})")
+        # Per-seed profit table for quick diagnostics
+        print("  Profit by seed:")
+        for seed, val in per_seed_profit:
+            print(f"    seed {seed}: ${val:,.2f}")
+        print(f"  Profit std dev: {profit_sd:,.2f}")
         print(f"  Profit/day: ${profit[0]:,.2f} ± ${profit[1]:,.2f}")
         print(f"  Revenue/day: ${revenue[0]:,.2f} ± ${revenue[1]:,.2f}")
         print(f"  Labor cost/day: ${labor[0]:,.2f} ± ${labor[1]:,.2f}")
@@ -259,10 +281,6 @@ def main():
         print(f"  Avg revenue per customer: ${rev_per_customer[0]:.2f} ± ${rev_per_customer[1]:.2f}")
         print(f"  Served by channel (mean customers/day): { {k: round(v, 1) for k, v in served.items()} }")
         print(f"  Station utilization (mean % busy): {utilizations}")
-        # Per-seed profit table for quick diagnostics
-        print("  Profit by seed:")
-        for seed, val in per_seed_profit:
-            print(f"    seed {seed}: ${val:,.2f}")
         if plot_path:
             print(f"  Profit, Revenue, Warm-up plot saved to: {plot_path}")
         print("-")

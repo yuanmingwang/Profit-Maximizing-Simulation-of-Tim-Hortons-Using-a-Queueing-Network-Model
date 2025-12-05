@@ -58,11 +58,6 @@ BASELINE_OPTIMIZED = {
                 "_default_": 17.0,
             },
         },
-        "sim": {
-            "day_minutes": 960,
-            "warmup_minutes": 30,
-            "seed": 3,
-        },
     },
 }
 
@@ -150,6 +145,4 @@ HIGH_LOAD_OPTIMIZED = {
     },
 }
 
-
-# SCENARIOS = [BASELINE, LEGACY_BASELINE, HIGH_CLEANING_LOAD, PROFIT_FOCUS, OPTIMIZE_PROFIT_SEARCH1, OPTIMIZE_PROFIT_SEARCH2, WARM_UP_TEST,HIGH_LOAD]
 SCENARIOS = [BASELINE, BASELINE_OPTIMIZED, HIGH_LOAD, HIGH_LOAD_OPTIMIZED]

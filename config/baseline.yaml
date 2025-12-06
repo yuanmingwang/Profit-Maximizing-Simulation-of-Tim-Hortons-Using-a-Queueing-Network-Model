@@ -103,6 +103,7 @@ experiments:
   replications: 5
   confidence_level: 0.95
   time_series_interval_minutes: 3  # bin width for profit/revenue interval plot
+  multi_scenario_interval_minutes: 12  # bin width for cross-scenario profit plot
   crn_compare: 
     - [baseline, high_load_scenario_1] 
     - [baseline, baseline_optimized_scenario_2]

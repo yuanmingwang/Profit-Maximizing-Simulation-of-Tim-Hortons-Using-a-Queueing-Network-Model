@@ -250,7 +250,7 @@ def plot_time_series(series: List[Dict[str, float]], warmup_minutes: float, scen
     if x:
         plt.xlim(left=0, right=max(x) + 100)
     plt.xlabel("Time (minutes)")
-    plt.ylabel("Dollars per customer")
+    plt.ylabel("Performance measure (Profit, Revenue)")
     plt.title(f"{scenario_name}: running averages")
     plt.legend()
     plt.grid(True, linestyle="--", alpha=0.4)
@@ -263,6 +263,55 @@ def plot_time_series(series: List[Dict[str, float]], warmup_minutes: float, scen
     plt.close()
     return out_path
 
+def plot_all_scenario_profits(all_results: List[Dict[str, List[Dict[str, float]]]], warmup_minutes: float, interval_minutes: float, day_minutes: float):
+    """
+    Plot profit/revenue per-interval curves for all scenarios on one figure to
+    visualize time-based performance. Expects aggregated time series per scenario:
+      - name: scenario name
+      - series: list of dicts with time_minutes, profit_interval, revenue_interval
+    """
+    if not all_results:
+        return None
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt  # type: ignore
+    except Exception:
+        return None
+    plt.figure(figsize=(9, 5))
+    for entry in all_results:
+        series = entry.get("series", [])
+        if not series:
+            continue
+        x = [pt["time_minutes"] for pt in series]
+        y_profit = [pt["profit_interval"] for pt in series]
+        plt.plot(x, y_profit, linewidth=1.5, label=entry.get("name", "scenario"))
+    # Align x-limits to the configured plotting horizon
+    if day_minutes and interval_minutes > 0:
+        plt.xlim(0, day_minutes)
+    if warmup_minutes > 0:
+        plt.axvline(warmup_minutes, color="#f59e0b", linestyle="--", label="Warm-up cutoff")
+        # Add warm-up value as a tick label to highlight the cutoff on the axis.
+        ticks, _ = plt.xticks()
+        tick_list = list(ticks)
+        if warmup_minutes not in tick_list:
+            tick_list.append(warmup_minutes)
+        tick_list = sorted(set(tick_list))
+        tick_labels = [f"{int(t)}" if abs(t - int(t)) < 1e-6 else f"{t:.1f}" for t in tick_list]
+        plt.xticks(tick_list, tick_labels)
+    plt.xlabel("Time (minutes)")
+    plt.ylabel("Performance measure (Profit)")
+    plt.title("Profit over Time across scenarios")
+    plt.grid(True, linestyle="--", alpha=0.4)
+    plt.legend()
+    out_dir = os.path.join(ROOT, "experiments", "output")
+    os.makedirs(out_dir, exist_ok=True)
+    out_path = os.path.join(out_dir, "all_scenarios_profit_by_time.png")
+    plt.tight_layout()
+    plt.savefig(out_path, dpi=160)
+    plt.close()
+    return out_path
+
 def main():
     """Entry point: drive all scenarios, replications, and report KPIs."""
     cfg = load_cfg()
@@ -270,14 +319,18 @@ def main():
     replications = max(1, int(exp_cfg.get("replications", 1)))
     confidence = float(exp_cfg.get("confidence_level", 0.95))
     interval_minutes = float(exp_cfg.get("time_series_interval_minutes", 6.0))
+    multi_interval_minutes = float(exp_cfg.get("multi_scenario_interval_minutes", interval_minutes))
     level_pct = confidence * 100.0
     default_seed = cfg.get("sim", {}).get("seed", 0)
 
+    all_profit_lines: List[Dict[str, List[float]]] = []
+    max_warmup = 0.0
     for sc in SCENARIOS:
         sc_base_cfg = apply_overrides(cfg, sc["overrides"])
         scenario_seed = sc_base_cfg.get("sim", {}).get("seed", default_seed)
         seed_range = (scenario_seed, scenario_seed + replications - 1)
         warmup_minutes = float(sc_base_cfg.get("sim", {}).get("warmup_minutes", 0.0))
+        max_warmup = max(max_warmup, warmup_minutes)
         results = []
         per_seed_profit = []
         for rep in range(replications):
@@ -288,6 +341,12 @@ def main():
             res = run_one_day(sc_cfg)
             results.append(res)
             per_seed_profit.append((sc_cfg["sim"]["seed"], res.get("profit_per_day", 0.0)))
+        # Capture per-replication profits for cross-scenario plot
+        all_profit_lines.append({
+            "name": sc["name"],
+            "seeds": [s for s, _ in per_seed_profit],
+            "profits": [p for _, p in per_seed_profit],
+        })
 
         # Collect KPI distributions across replications so we can report means with CIs.
         profit = mean_ci(series(results, lambda r: r.get("profit_per_day", 0.0)), confidence)
@@ -307,9 +366,16 @@ def main():
         rev_per_customer = mean_ci(series(results, lambda r: r.get("revenue_per_customer", 0.0)), confidence)
         served = avg_nested(results, "served_by_channel")
         utilizations = {k: round(v * 100.0, 1) for k, v in avg_nested(results, "station_utilization").items()}
-        # Build running-mean curve for warm-up diagnostics and plotting
-        agg_series = aggregate_time_series(results, sc_base_cfg.get("sim", {}).get("day_minutes", 0.0), interval_minutes)
+        # Build running-mean curves (single-scenario binning and multi-scenario binning)
+        day_len = sc_base_cfg.get("sim", {}).get("day_minutes", 0.0)
+        agg_series = aggregate_time_series(results, day_len, interval_minutes)
+        agg_series_multi = aggregate_time_series(results, day_len, multi_interval_minutes)
         plot_path = plot_time_series(agg_series, warmup_minutes, sc["name"])
+        # Save multi-binned series for cross-scenario plot
+        all_profit_lines.append({
+            "name": sc["name"],
+            "series": agg_series_multi,
+        })
 
         print(f"Scenario: {sc['name']} (replications={replications}, {level_pct:.1f}% CI, seeds {seed_range[0]}-{seed_range[1]})")
         # Per-seed profit table for quick diagnostics
@@ -361,6 +427,15 @@ def main():
                     run_crn(cfg, sc_a, sc_b, replications, default_seed, confidence, C)
                 else:
                     print(f"[warn] CRN pair not found: {pair}")
+    # Plot cross-scenario profit curves
+    cross_plot = plot_all_scenario_profits(
+        all_profit_lines,
+        warmup_minutes=max_warmup,
+        interval_minutes=multi_interval_minutes,
+        day_minutes=cfg.get("sim", {}).get("day_minutes", 0),
+    )
+    if cross_plot:
+        print(f"\nAll-scenario profit-by-seed plot saved to: {cross_plot}")
 
 if __name__ == "__main__":
     main()

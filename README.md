@@ -39,7 +39,7 @@ Key experiment parameters in `config/baseline.yaml` under `experiments`:
   ```
 
 ## How to run the optimizer
-Grid/coordinate search for profitable configs:
+Grid/Coordinate-ascent search for profitable configs:
 ```bash
 python -m experiments.optimize_profit
 ```

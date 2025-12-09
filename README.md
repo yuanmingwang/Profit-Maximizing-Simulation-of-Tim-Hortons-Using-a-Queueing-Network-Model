@@ -25,8 +25,10 @@ python3 -m pip install --user pyyaml matplotlib scipy
 
 ## How to run experiments
 ```bash
-python -m experiments.run_experiments
+python3 -m experiments.run_experiments
 ```
+- Or open ./experiments/run_experiments in VSCode and click 'Run Python File' 
+
 Key experiment parameters in `config/baseline.yaml` under `experiments`:
 - `replications`: iid daily runs per scenario.
 - `confidence_level`: CI level (e.g., 0.95).
@@ -41,8 +43,10 @@ Key experiment parameters in `config/baseline.yaml` under `experiments`:
 ## How to run the optimizer
 Grid/Coordinate-ascent search for profitable configs:
 ```bash
-python -m experiments.optimize_profit
+python3 -m experiments.optimize_profit
 ```
+- Or open ./experiments/optimize_profit in VSCode and click 'Run Python File' 
+
 Tunable constants at the top of `experiments/optimize_profit.py`:
 - `SERVICE_STEP`, `CAPACITY_STEP`, `COORDINATE_PASSES`: grid resolution/passes.
 - `USE_ABSOLUTE_SERVICE_TIMES` + `SERVICE_TIME_RANGES/STEP`: scan absolute means.
